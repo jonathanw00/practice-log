@@ -1,0 +1,7 @@
+name = "practice-log"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "practice_log"
+database_name = "practice-log"
+database_id = "3895efa3-6f07-4e75-b5e7-a52469423a1a"

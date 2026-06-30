@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice log</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #F5EDD8;
+  --card: rgba(255,255,255,0.55);
+  --ink: #2C1810;
+  --muted: #7A5535;
+  --border: #C9A87C;
+  --divider: #D4B896;
+  --accent: #8B3A1A;
+  --placeholder: #B8956A;
+  --metro-bg: #2C1810;
+  --metro-text: #F5EDD8;
+  --surface: #EDE0C4;
+  --input-bg: rgba(255,255,255,0.4);
+}
+body.dark {
+  --bg: #1C1208;
+  --card: rgba(255,255,255,0.06);
+  --ink: #F0E6D0;
+  --muted: #C9A87C;
+  --border: #5C3E22;
+  --divider: #3E2A14;
+  --accent: #E08060;
+  --placeholder: #8B6040;
+  --metro-bg: #F0E6D0;
+  --metro-text: #1C1208;
+  --surface: #2A1A0C;
+  --input-bg: rgba(255,255,255,0.08);
+}
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; padding: 24px 16px 60px; transition: background 0.2s, color 0.2s; }
+.wrap { max-width: 700px; margin: 0 auto; }
+.top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.title { font-family: Georgia, serif; font-size: 22px; font-weight: 400; color: var(--ink); }
+.sub { font-size: 12px; color: var(--muted); margin-top: 3px; font-style: italic; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.ghost-btn { background: var(--surface); border: 0.5px solid var(--border); color: var(--muted); font-size: 12px; padding: 7px 11px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.ghost-btn:hover { border-color: var(--accent); color: var(--ink); }
+.save-btn { background: var(--ink); color: var(--bg); border: none; font-size: 13px; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: Georgia, serif; white-space: nowrap; }
+.save-btn:hover { opacity: 0.85; }
+.meta-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 80px; gap: 10px; margin-bottom: 14px; }
+.meta-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.meta-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; }
+.meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
+.meta-duration { font-size: 15px; color: var(--accent); font-family: "Courier New", monospace; min-height: 22px; }
+.session-energy-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.session-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.session-pips { display: flex; gap: 6px; margin-top: 6px; }
+.pip { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); cursor: pointer; flex-shrink: 0; user-select: none; }
+.pip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.energy-pips { display: flex; gap: 6px; margin-top: 6px; }
+.epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
+.epip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.section-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.section-title { font-family: Georgia, serif; font-size: 16px; color: var(--ink); font-weight: 400; }
+.section-sub { font-size: 11px; color: var(--muted); font-style: italic; }
+.tech-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.t-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.t-card-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+.t-input { background: transparent; border: none; border-bottom: 0.5px solid var(--divider); font-size: 13px; color: var(--ink); width: 100%; outline: none; padding-bottom: 4px; font-family: inherit; }
+.t-input::placeholder { color: var(--placeholder); }
+.metro-row { display: flex; align-items: center; gap: 5px; }
+.metro-badge { background: var(--metro-bg); color: var(--metro-text); font-size: 8px; letter-spacing: 0.08em; padding: 2px 5px; border-radius: 3px; flex-shrink: 0; }
+.metro-row input { width: 38px; font-size: 12px; font-family: "Courier New", monospace; text-align: center; border: none; background: var(--input-bg); color: var(--ink); border-radius: 4px; padding: 3px 0; outline: none; -moz-appearance: textfield; }
+.metro-row input::-webkit-outer-spin-button, .metro-row input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.metro-sep { color: var(--accent); font-size: 12px; }
+.t-notes { background: transparent; border: none; font-size: 12px; color: var(--ink); width: 100%; outline: none; resize: none; font-family: Georgia, serif; font-style: italic; }
+.t-notes::placeholder { color: var(--placeholder); font-style: italic; }
+.divider-rep { height: 1px; background: var(--divider); margin: 20px 0; position: relative; }
+.divider-rep::after { content: '— repertoire —'; position: absolute; left: 50%; transform: translateX(-50%); top: -8px; background: var(--bg); padding: 0 10px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; font-family: Georgia, serif; font-style: italic; white-space: nowrap; }
+.rep-block { margin-bottom: 12px; }
+.rep-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; }
+.rep-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.rep-input { background: transparent; border: none; border-bottom: 0.5px solid var(--divider); font-size: 13px; color: var(--ink); width: 100%; outline: none; padding-bottom: 4px; font-family: inherit; }
+.rep-input::placeholder { color: var(--placeholder); }
+.rep-notes { background: transparent; border: none; font-size: 13px; color: var(--ink); width: 100%; outline: none; resize: none; font-family: Georgia, serif; font-style: italic; }
+.rep-notes::placeholder { color: var(--placeholder); font-style: italic; }
+.win-card { background: var(--card); border: 1.5px solid var(--accent); border-radius: 10px; padding: 12px 14px; margin-top: 18px; }
+.win-label { font-size: 10px; color: var(--accent); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; }
+.win-input { background: transparent; border: none; font-size: 14px; color: var(--ink); width: 100%; outline: none; font-family: Georgia, serif; font-style: italic; }
+.win-input::placeholder { color: var(--placeholder); font-style: italic; }
+.bottom-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.save-status { font-size: 12px; color: var(--muted); font-style: italic; min-height: 18px; }
+.save-status.saved { color: var(--accent); }
+.save-status.error { color: #c0392b; }
+@media (max-width: 500px) {
+  .meta-grid { grid-template-columns: 1fr 1fr; }
+  .tech-cards { grid-template-columns: 1fr; }
+  .top-actions { gap: 6px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <div>
+      <div class="title">Practice log</div>
+      <div class="sub">Jon Ward &middot; piano</div>
+    </div>
+    <div class="top-actions">
+      <button class="ghost-btn" id="modeBtn">🌙 Dark</button>
+      <button class="ghost-btn" id="exportBtn">Export PDF</button>
+      <button class="save-btn" id="saveBtn">Save session</button>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-card">
+      <div class="meta-label">Date</div>
+      <input class="meta-input" type="date" id="sessionDate">
+    </div>
+    <div class="meta-card">
+      <div class="meta-label">Start time</div>
+      <input class="meta-input" type="time" id="startTime">
+    </div>
+    <div class="meta-card">
+      <div class="meta-label">End time</div>
+      <input class="meta-input" type="time" id="endTime">
+    </div>
+    <div class="meta-card">
+      <div class="meta-label">Duration</div>
+      <div class="meta-duration" id="duration">—</div>
+    </div>
+  </div>
+
+  <div class="session-energy-row">
+    <div class="session-card">
+      <div class="meta-label">Session</div>
+      <div class="session-pips" id="sessionPips">
+        <div class="pip active" data-val="1">1</div>
+        <div class="pip" data-val="2">2</div>
+        <div class="pip" data-val="3">3</div>
+        <div class="pip" data-val="4">4</div>
+        <div class="pip" data-val="5">5</div>
+        <div class="pip" data-val="6">6</div>
+      </div>
+    </div>
+    <div class="energy-card">
+      <div class="meta-label">Energy</div>
+      <div class="energy-pips" id="energyPips">
+        <div class="epip" data-val="low">Low</div>
+        <div class="epip active" data-val="good">Good</div>
+        <div class="epip" data-val="fire">🔥</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Technique</div>
+    <div class="section-sub">20 minutes</div>
+  </div>
+  <div class="tech-cards" id="techCards"></div>
+
+  <div class="divider-rep"></div>
+
+  <div class="section-header">
+    <div class="section-title">Repertoire</div>
+    <div class="section-sub">25 minutes</div>
+  </div>
+  <div id="repBlocks"></div>
+
+  <div class="win-card">
+    <div class="win-label">Win of the session</div>
+    <input class="win-input" type="text" id="winField" placeholder="One thing that went well today...">
+  </div>
+
+  <div class="bottom-bar">
+    <div class="save-status" id="saveStatus">Not saved yet</div>
+    <button class="save-btn" id="exportBtn2">Export PDF</button>
+  </div>
+</div>
+
+<script>
+const API = '/api/sessions';
+const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
+const repItems = [
+  { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
+  { label: 'Lead sheet', key: 'lead', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
+  { label: 'Listening assignments', key: 'listen', notesPlaceholder: 'Observations, things to apply to your playing...' }
+];
+
+let currentId = null;
+let saveTimeout = null;
+let sessionNum = 1;
+let energyVal = 'good';
+let isDark = false;
+
+const techCards = document.getElementById('techCards');
+techniques.forEach((t, i) => {
+  const card = document.createElement('div');
+  card.className = 't-card';
+  card.innerHTML = `
+    <div class="t-card-label">${t}</div>
+    <input class="t-input" type="text" placeholder="Key / name" data-field="keyname" data-row="${i}">
+    <div class="metro-row">
+      <span class="metro-badge">METRO</span>
+      <input type="number" placeholder="start" data-field="bpmstart" data-row="${i}">
+      <span class="metro-sep">→</span>
+      <input type="number" placeholder="end" data-field="bpmend" data-row="${i}">
+    </div>
+    <textarea class="t-notes" rows="2" placeholder="Notes..." data-field="technotes" data-row="${i}"></textarea>
+  `;
+  techCards.appendChild(card);
+});
+
+const repBlocks = document.getElementById('repBlocks');
+repItems.forEach(r => {
+  const block = document.createElement('div');
+  block.className = 'rep-block';
+  block.innerHTML = `
+    <div class="rep-label">${r.label}</div>
+    <div class="rep-card">
+      <input class="rep-input" type="text" placeholder="Measures / portion working on" data-field="${r.key}-measures">
+      <textarea class="rep-notes" rows="2" placeholder="${r.notesPlaceholder}" data-field="${r.key}-notes"></textarea>
+    </div>
+  `;
+  repBlocks.appendChild(block);
+});
+
+const now = new Date();
+document.getElementById('sessionDate').valueAsDate = now;
+document.getElementById('startTime').value = now.toTimeString().slice(0,5);
+
+function setSessionPip(n) {
+  const clamped = Math.min(Math.max(n, 1), 6);
+  document.querySelectorAll('#sessionPips .pip').forEach(p => p.classList.remove('active'));
+  const target = document.querySelector('#sessionPips .pip[data-val="' + clamped + '"]');
+  if (target) target.classList.add('active');
+  sessionNum = clamped;
+}
+
+async function fetchSessionCount(date) {
+  if (!date) return;
+  try {
+    const res = await fetch(API + '?limit=50');
+    if (!res.ok) return;
+    const rows = await res.json();
+    const todays = rows.filter(r => r.session_date === date);
+    setSessionPip(todays.length + 1);
+  } catch(e) {
+    /* silently fail — API may not be bound yet */
+  }
+}
+
+fetchSessionCount(document.getElementById('sessionDate').value);
+
+document.getElementById('sessionDate').addEventListener('change', e => {
+  currentId = null;
+  fetchSessionCount(e.target.value);
+});
+
+function calcDuration() {
+  const s = document.getElementById('startTime').value;
+  const e = document.getElementById('endTime').value;
+  if (!s || !e) { document.getElementById('duration').textContent = '—'; return; }
+  const [sh,sm] = s.split(':').map(Number);
+  const [eh,em] = e.split(':').map(Number);
+  const diff = (eh*60+em) - (sh*60+sm);
+  if (diff <= 0) { document.getElementById('duration').textContent = '—'; return; }
+  document.getElementById('duration').textContent = diff + ' min';
+}
+document.getElementById('startTime').addEventListener('change', calcDuration);
+document.getElementById('endTime').addEventListener('change', calcDuration);
+
+document.getElementById('sessionPips').addEventListener('click', e => {
+  const pip = e.target.closest('.pip');
+  if (!pip) return;
+  document.querySelectorAll('#sessionPips .pip').forEach(p => p.classList.remove('active'));
+  pip.classList.add('active');
+  sessionNum = parseInt(pip.dataset.val);
+  scheduleSave();
+});
+
+document.getElementById('energyPips').addEventListener('click', e => {
+  const ep = e.target.closest('.epip');
+  if (!ep) return;
+  document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
+  ep.classList.add('active');
+  energyVal = ep.dataset.val;
+  scheduleSave();
+});
+
+document.getElementById('modeBtn').addEventListener('click', () => {
+  isDark = !isDark;
+  document.body.classList.toggle('dark', isDark);
+  document.getElementById('modeBtn').textContent = isDark ? '☀ Light' : '🌙 Dark';
+});
+
+function collectData() {
+  const technique = {};
+  techniques.forEach((t, i) => {
+    technique[t] = {
+      keyname: document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value,
+      bpmstart: document.querySelector(`[data-field="bpmstart"][data-row="${i}"]`).value,
+      bpmend: document.querySelector(`[data-field="bpmend"][data-row="${i}"]`).value,
+      notes: document.querySelector(`[data-field="technotes"][data-row="${i}"]`).value
+    };
+  });
+  const repertoire = {};
+  repItems.forEach(r => {
+    repertoire[r.label] = {
+      measures: document.querySelector(`[data-field="${r.key}-measures"]`).value,
+      notes: document.querySelector(`[data-field="${r.key}-notes"]`).value
+    };
+  });
+  return {
+    session_date: document.getElementById('sessionDate').value,
+    start_time: document.getElementById('startTime').value,
+    end_time: document.getElementById('endTime').value,
+    session_num: sessionNum,
+    energy: energyVal,
+    win: document.getElementById('winField').value,
+    technique_json: technique,
+    repertoire_json: repertoire
+  };
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('saveStatus');
+  el.textContent = msg;
+  el.className = 'save-status' + (cls ? ' ' + cls : '');
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimeout);
+  setStatus('Saving...');
+  saveTimeout = setTimeout(doSave, 900);
+}
+
+async function doSave() {
+  const data = collectData();
+  try {
+    if (currentId) {
+      await fetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId, ...data }) });
+    } else {
+      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const json = await res.json();
+      if (json.id) currentId = json.id;
+    }
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setStatus('Saved at ' + t, 'saved');
+  } catch(err) {
+    setStatus('Save failed — check connection', 'error');
+  }
+}
+
+document.getElementById('saveBtn').addEventListener('click', doSave);
+
+function buildPDF() {
+  const data = collectData();
+  const energyLabel = { low: 'Low', good: 'Good', fire: '🔥' }[data.energy] || '';
+  const durationEl = document.getElementById('duration').textContent;
+  let html = `<html><head><title>Practice log</title><style>
+    body{font-family:Georgia,serif;color:#2C1810;padding:40px;max-width:700px;margin:auto;}
+    h1{font-size:22px;border-bottom:2px solid #2C1810;padding-bottom:10px;margin-bottom:4px;}
+    .meta{font-size:12px;color:#7A5535;margin-bottom:24px;font-style:italic;}
+    .badges{display:flex;gap:16px;margin-bottom:24px;}
+    .badge{font-size:12px;background:#F5EDD8;border:1px solid #C9A87C;padding:4px 10px;border-radius:4px;color:#2C1810;}
+    h2{font-size:14px;letter-spacing:0.08em;text-transform:uppercase;color:#7A5535;margin:20px 0 10px;border-bottom:0.5px solid #D4B896;padding-bottom:6px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;}
+    td,th{border:1px solid #E8DFD0;padding:7px 10px;text-align:left;vertical-align:top;}
+    th{background:#FAF6F0;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#7A5535;font-weight:400;}
+    .win{background:#FAF6F0;border:1.5px solid #8B3A1A;border-radius:6px;padding:12px 16px;margin-top:20px;font-style:italic;}
+    .win-label{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#8B3A1A;margin-bottom:4px;}
+  </style></head><body>
+  <h1>Practice log</h1>
+  <div class="meta">Jon Ward &middot; piano &middot; ${data.session_date}</div>
+  <div class="badges">
+    <div class="badge">Session ${data.session_num}</div>
+    <div class="badge">${data.start_time}${data.end_time ? ' – ' + data.end_time : ''} &nbsp;(${durationEl})</div>
+    <div class="badge">Energy: ${energyLabel}</div>
+  </div>
+  <h2>Technique &mdash; 20 min</h2>
+  <table><tr><th>Technique</th><th>Key / name</th><th>Metronome start → end</th><th>Notes</th></tr>`;
+  techniques.forEach(t => {
+    const r = data.technique_json[t];
+    const bpm = r.bpmstart || r.bpmend ? (r.bpmstart || '?') + ' → ' + (r.bpmend || '?') : '—';
+    html += `<tr><td>${t}</td><td>${r.keyname||'—'}</td><td>${bpm}</td><td>${r.notes||'—'}</td></tr>`;
+  });
+  html += `</table><h2>Repertoire &mdash; 25 min</h2>
+  <table><tr><th>Repertoire</th><th>Measures / portion</th><th>Notes</th></tr>`;
+  repItems.forEach(r => {
+    const row = data.repertoire_json[r.label];
+    html += `<tr><td>${r.label}</td><td>${row.measures||'—'}</td><td>${row.notes||'—'}</td></tr>`;
+  });
+  html += `</table>`;
+  if (data.win) html += `<div class="win"><div class="win-label">Win of the session</div>${data.win}</div>`;
+  html += `</body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+}
+
+document.getElementById('exportBtn').addEventListener('click', buildPDF);
+document.getElementById('exportBtn2').addEventListener('click', buildPDF);
+
+document.querySelectorAll('input, textarea').forEach(el => {
+  el.addEventListener('input', scheduleSave);
+});
+</script>
+</body>
+</html>
