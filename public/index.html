@@ -270,7 +270,6 @@ const repItems = [
 ];
 
 let currentId = null;
-let saveTimeout = null;
 let sessionNum = 1;
 let energyVal = 'good';
 let isDark = false;
@@ -330,7 +329,6 @@ techCards.addEventListener('click', e => {
   if (keyChip) {
     keyChip.classList.toggle('active');
     unDim();
-    scheduleSave();
     return;
   }
 
@@ -340,7 +338,6 @@ techCards.addEventListener('click', e => {
     container.querySelectorAll('.type-pip').forEach(p => p.classList.remove('active'));
     typePip.classList.add('active');
     unDim();
-    scheduleSave();
     return;
   }
 
@@ -350,7 +347,6 @@ techCards.addEventListener('click', e => {
     container.querySelectorAll('.piece-chip').forEach(p => p.classList.remove('active'));
     pieceChip.classList.add('active');
     unDim();
-    scheduleSave();
     return;
   }
 });
@@ -404,7 +400,6 @@ async function addTechnicalPiece(inputEl) {
     }
     inputEl.value = '';
     if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
-    scheduleSave();
   } catch (err) {
     setStatus('Could not add piece — check connection', 'error');
   }
@@ -428,7 +423,8 @@ repItems.forEach(r => {
 
 function resetSessionMeta() {
   const n = new Date();
-  document.getElementById('sessionDate').valueAsDate = n;
+  // Local calendar date. valueAsDate is UTC-based and can land a day off near midnight.
+  document.getElementById('sessionDate').value = localDateStr(n);
   document.getElementById('startTime').value = n.toTimeString().slice(0,5);
   document.getElementById('endTime').value = '';
   document.getElementById('duration').textContent = '—';
@@ -455,8 +451,10 @@ async function fetchSessionCount(date) {
 
 // called from initApp() after auth succeeds
 
-// Matches how <input type="date">.valueAsDate/.value round-trips a Date,
-// so "today" here always agrees with whatever session_date gets saved.
+// <input type="date">.value is a plain local yyyy-mm-dd string, but valueAsDate
+// and Date.toISOString() are UTC-based and can land on the wrong day near midnight.
+// This converts a Date to its LOCAL calendar date so the default date, "today",
+// and the saved session_date always agree with the user's own clock.
 function localDateStr(d) {
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
@@ -552,7 +550,6 @@ document.getElementById('energyPips').addEventListener('click', e => {
   document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
   ep.classList.add('active');
   energyVal = ep.dataset.val;
-  scheduleSave();
 });
 
 document.getElementById('modeBtn').addEventListener('click', () => {
@@ -603,12 +600,6 @@ function setStatus(msg, cls) {
   const el = document.getElementById('saveStatus');
   el.textContent = msg;
   el.className = 'save-status' + (cls ? ' ' + cls : '');
-}
-
-function scheduleSave() {
-  clearTimeout(saveTimeout);
-  setStatus('Saving...');
-  saveTimeout = setTimeout(() => doSave(false), 900);
 }
 
 async function doSave(isManual) {
@@ -832,7 +823,6 @@ document.getElementById('exportBtn').addEventListener('click', buildPDF);
 document.getElementById('exportBtn2').addEventListener('click', buildPDF);
 
 document.querySelectorAll('input, textarea').forEach(el => {
-  el.addEventListener('input', scheduleSave);
   el.addEventListener('focus', () => {
     if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
   });
