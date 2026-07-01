@@ -48,7 +48,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 #deleteBtn:hover { border-color: #c0392b; color: #c0392b; }
 .save-btn { background: var(--ink); color: var(--bg); border: none; font-size: 13px; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: Georgia, serif; white-space: nowrap; }
 .save-btn:hover { opacity: 0.85; }
-.meta-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 80px; gap: 10px; margin-bottom: 14px; }
+.meta-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 10px; margin-bottom: 14px; }
 .meta-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .meta-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; }
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
@@ -190,16 +190,16 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <input class="meta-input" type="date" id="sessionDate">
     </div>
     <div class="meta-card">
+      <div class="meta-label">Start time</div>
+      <input class="meta-input" type="time" id="startTime" readonly style="background: var(--surface); color: var(--muted); cursor: not-allowed;" title="Calculated from end time minus duration">
+    </div>
+    <div class="meta-card">
       <div class="meta-label">End time</div>
       <input class="meta-input" type="time" id="endTime">
     </div>
     <div class="meta-card">
       <div class="meta-label">Duration (min)</div>
       <input class="meta-input" type="number" min="0" step="5" id="duration" placeholder="e.g. 35">
-    </div>
-    <div class="meta-card">
-      <div class="meta-label">Start time</div>
-      <input class="meta-input" type="time" id="startTime" readonly style="background: var(--surface); color: var(--muted); cursor: not-allowed;" title="Calculated from end time minus duration">
     </div>
   </div>
 
