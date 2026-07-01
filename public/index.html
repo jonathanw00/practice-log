@@ -50,10 +50,6 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
 .meta-duration { font-size: 15px; color: var(--accent); font-family: "Courier New", monospace; min-height: 22px; }
 .session-energy-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-.session-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
-.session-pips { display: flex; gap: 6px; margin-top: 6px; }
-.pip { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); cursor: pointer; flex-shrink: 0; user-select: none; }
-.pip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .energy-pips { display: flex; gap: 6px; margin-top: 6px; }
 .epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
@@ -90,6 +86,11 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .save-status { font-size: 12px; color: var(--muted); font-style: italic; min-height: 18px; }
 .save-status.saved { color: var(--accent); }
 .save-status.error { color: #c0392b; }
+.wrap { transition: opacity 0.2s; }
+.wrap.dimmed { opacity: 0.4; }
+.new-entry-btn { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--bg); border: none; font-size: 15px; font-family: Georgia, serif; padding: 14px 28px; border-radius: 30px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.25); z-index: 10; display: none; white-space: nowrap; }
+.new-entry-btn.visible { display: block; }
+.new-entry-btn:hover { opacity: 0.9; }
 @media (max-width: 500px) {
   .meta-grid { grid-template-columns: 1fr 1fr; }
   .tech-cards { grid-template-columns: 1fr; }
@@ -131,17 +132,6 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
   </div>
 
   <div class="session-energy-row">
-    <div class="session-card">
-      <div class="meta-label">Session</div>
-      <div class="session-pips" id="sessionPips">
-        <div class="pip active" data-val="1">1</div>
-        <div class="pip" data-val="2">2</div>
-        <div class="pip" data-val="3">3</div>
-        <div class="pip" data-val="4">4</div>
-        <div class="pip" data-val="5">5</div>
-        <div class="pip" data-val="6">6</div>
-      </div>
-    </div>
     <div class="energy-card">
       <div class="meta-label">Energy</div>
       <div class="energy-pips" id="energyPips">
@@ -176,6 +166,8 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     <button class="save-btn" id="exportBtn2">Export PDF</button>
   </div>
 </div>
+
+<button class="new-entry-btn" id="newEntryBtn">＋ New entry</button>
 
 <script>
 const API = '/api/sessions';
@@ -224,16 +216,18 @@ repItems.forEach(r => {
   repBlocks.appendChild(block);
 });
 
-const now = new Date();
-document.getElementById('sessionDate').valueAsDate = now;
-document.getElementById('startTime').value = now.toTimeString().slice(0,5);
+function resetSessionMeta() {
+  const n = new Date();
+  document.getElementById('sessionDate').valueAsDate = n;
+  document.getElementById('startTime').value = n.toTimeString().slice(0,5);
+  document.getElementById('endTime').value = '';
+  document.getElementById('duration').textContent = '—';
+}
 
-function setSessionPip(n) {
-  const clamped = Math.min(Math.max(n, 1), 6);
-  document.querySelectorAll('#sessionPips .pip').forEach(p => p.classList.remove('active'));
-  const target = document.querySelector('#sessionPips .pip[data-val="' + clamped + '"]');
-  if (target) target.classList.add('active');
-  sessionNum = clamped;
+resetSessionMeta();
+
+function setSessionNum(n) {
+  sessionNum = Math.max(n, 1);
 }
 
 async function fetchSessionCount(date) {
@@ -243,7 +237,7 @@ async function fetchSessionCount(date) {
     if (!res.ok) return;
     const rows = await res.json();
     const todays = rows.filter(r => r.session_date === date);
-    setSessionPip(todays.length + 1);
+    setSessionNum(todays.length + 1);
   } catch(e) {
     /* silently fail — API may not be bound yet */
   }
@@ -269,18 +263,10 @@ function calcDuration() {
 document.getElementById('startTime').addEventListener('change', calcDuration);
 document.getElementById('endTime').addEventListener('change', calcDuration);
 
-document.getElementById('sessionPips').addEventListener('click', e => {
-  const pip = e.target.closest('.pip');
-  if (!pip) return;
-  document.querySelectorAll('#sessionPips .pip').forEach(p => p.classList.remove('active'));
-  pip.classList.add('active');
-  sessionNum = parseInt(pip.dataset.val);
-  scheduleSave();
-});
-
 document.getElementById('energyPips').addEventListener('click', e => {
   const ep = e.target.closest('.epip');
   if (!ep) return;
+  if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
   document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
   ep.classList.add('active');
   energyVal = ep.dataset.val;
@@ -331,10 +317,10 @@ function setStatus(msg, cls) {
 function scheduleSave() {
   clearTimeout(saveTimeout);
   setStatus('Saving...');
-  saveTimeout = setTimeout(doSave, 900);
+  saveTimeout = setTimeout(() => doSave(false), 900);
 }
 
-async function doSave() {
+async function doSave(isManual) {
   const data = collectData();
   try {
     if (currentId) {
@@ -346,12 +332,39 @@ async function doSave() {
     }
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setStatus('Saved at ' + t, 'saved');
+    if (isManual) showNewEntryPrompt();
   } catch(err) {
     setStatus('Save failed — check connection', 'error');
   }
 }
 
-document.getElementById('saveBtn').addEventListener('click', doSave);
+function showNewEntryPrompt() {
+  document.querySelector('.wrap').classList.add('dimmed');
+  document.getElementById('newEntryBtn').classList.add('visible');
+}
+
+function hideNewEntryPrompt() {
+  document.querySelector('.wrap').classList.remove('dimmed');
+  document.getElementById('newEntryBtn').classList.remove('visible');
+}
+
+function newEntry() {
+  currentId = null;
+  document.querySelectorAll('#techCards input, #techCards textarea').forEach(el => el.value = '');
+  document.querySelectorAll('#repBlocks input, #repBlocks textarea').forEach(el => el.value = '');
+  document.getElementById('winField').value = '';
+  document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
+  document.querySelector('#energyPips .epip[data-val="good"]').classList.add('active');
+  energyVal = 'good';
+  resetSessionMeta();
+  setSessionNum(sessionNum + 1);
+  setStatus('Not saved yet');
+  hideNewEntryPrompt();
+}
+
+document.getElementById('newEntryBtn').addEventListener('click', newEntry);
+
+document.getElementById('saveBtn').addEventListener('click', () => doSave(true));
 
 function buildPDF() {
   const data = collectData();
@@ -404,6 +417,9 @@ document.getElementById('exportBtn2').addEventListener('click', buildPDF);
 
 document.querySelectorAll('input, textarea').forEach(el => {
   el.addEventListener('input', scheduleSave);
+  el.addEventListener('focus', () => {
+    if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
+  });
 });
 </script>
 </body>
