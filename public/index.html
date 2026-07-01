@@ -49,6 +49,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .save-btn { background: var(--ink); color: var(--bg); border: none; font-size: 13px; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: Georgia, serif; white-space: nowrap; }
 .save-btn:hover { opacity: 0.85; }
 .meta-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 10px; margin-bottom: 14px; }
+.export-panel { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
 .meta-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .meta-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; }
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
@@ -158,6 +159,20 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     </div>
   </div>
 
+  <div class="export-panel" id="exportPanel" style="display: none;">
+    <div class="meta-label" style="margin-bottom: 6px;">Report range</div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+      <input class="meta-input" type="date" id="reportStart" style="width: auto; background: var(--card); border: 0.5px solid var(--border); border-radius: 6px; padding: 6px 10px;">
+      <span style="color: var(--muted);">to</span>
+      <input class="meta-input" type="date" id="reportEnd" style="width: auto; background: var(--card); border: 0.5px solid var(--border); border-radius: 6px; padding: 6px 10px;">
+      <button class="ghost-btn" id="lastWeekBtn" type="button">Last week</button>
+      <button class="ghost-btn" id="thisWeekBtn" type="button">This week</button>
+      <div style="flex: 1;"></div>
+      <button class="ghost-btn" id="cancelReportBtn" type="button">Cancel</button>
+      <button class="save-btn" id="generateReportBtn" type="button">Generate PDF</button>
+    </div>
+  </div>
+
   <div class="stats-bar" id="statsBar">
     <div class="stat-pill">
       <div class="stat-value" id="statToday">—</div>
@@ -235,7 +250,6 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 
   <div class="bottom-bar">
     <div class="save-status" id="saveStatus">Not saved yet</div>
-    <button class="save-btn" id="exportBtn2">Export PDF</button>
   </div>
 </div>
 
@@ -534,6 +548,26 @@ document.getElementById('sessionDate').addEventListener('change', e => {
 function toMins(hhmm) { const [h,m] = hhmm.split(':').map(Number); return h*60+m; }
 function toHHMM(mins) { mins = ((mins % 1440) + 1440) % 1440; const h = Math.floor(mins/60), m = mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 
+// Reused verbatim from data.html / functions/_lib.js for consistency across the app.
+function nonEmpty(v){ return v !== undefined && v !== null && String(v).trim() !== ''; }
+function deriveLabel(e){
+  const out = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    const hasKeys = Array.isArray(v && v.keys) && v.keys.length > 0;
+    if (v && (hasKeys || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) out.push(name);
+  }
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (v && (nonEmpty(v.measures) || nonEmpty(v.notes))) out.push(name);
+  }
+  return out;
+}
+function isJunk(e){ return deriveLabel(e).length === 0 && !nonEmpty(e.win); }
+function durationMins(e){
+  if (!nonEmpty(e.start_time) || !nonEmpty(e.end_time)) return 0;
+  return Math.max(0, toMins(e.end_time) - toMins(e.start_time));
+}
+function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; return h? `${h}h ${r}m` : `${r}m`; }
+
 function recalcStart() {
   const endVal = document.getElementById('endTime').value;
   const durVal = document.getElementById('duration').value;
@@ -774,61 +808,138 @@ async function deleteEntry() {
 
 document.getElementById('deleteBtn').addEventListener('click', deleteEntry);
 
-function buildPDF() {
-  const data = collectData();
-  const energyLabel = { low: 'Low', good: 'Good', fire: '🔥' }[data.energy] || '';
-  const durationEl = document.getElementById('duration').value ? document.getElementById('duration').value + ' min' : '—';
+function safeParseJson(s) { try { return JSON.parse(s || '{}'); } catch(e) { return {}; } }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toDateOnly(dateStr) { return new Date(dateStr + 'T00:00:00'); }
+function formatDateLabel(dateStr) { return toDateOnly(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+function getSunday(d) { const dt = new Date(d); dt.setDate(dt.getDate() - dt.getDay()); return dt; }
+function addDays(d, n) { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt; }
+
+function toggleExportPanel() {
+  const panel = document.getElementById('exportPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening && !document.getElementById('reportStart').value) setLastWeekRange();
+}
+function setLastWeekRange() {
+  const thisSunday = getSunday(new Date());
+  document.getElementById('reportStart').value = localDateStr(addDays(thisSunday, -7));
+  document.getElementById('reportEnd').value = localDateStr(addDays(thisSunday, -1));
+}
+function setThisWeekRange() {
+  const thisSunday = getSunday(new Date());
+  document.getElementById('reportStart').value = localDateStr(thisSunday);
+  document.getElementById('reportEnd').value = localDateStr(addDays(thisSunday, 6));
+}
+document.getElementById('exportBtn').addEventListener('click', toggleExportPanel);
+document.getElementById('cancelReportBtn').addEventListener('click', () => { document.getElementById('exportPanel').style.display = 'none'; });
+document.getElementById('lastWeekBtn').addEventListener('click', setLastWeekRange);
+document.getElementById('thisWeekBtn').addEventListener('click', setThisWeekRange);
+document.getElementById('generateReportBtn').addEventListener('click', buildRangeReport);
+
+async function buildRangeReport() {
+  const start = document.getElementById('reportStart').value;
+  const end = document.getElementById('reportEnd').value;
+  if (!start || !end) { setStatus('Pick a start and end date', 'error'); return; }
+  if (end < start) { setStatus('End date is before start date', 'error'); return; }
+
+  setStatus('Building report…');
+  let rows;
+  try {
+    const res = await apiFetch(`${API}?limit=5000`);
+    rows = await res.json();
+  } catch (err) {
+    setStatus('Could not load entries — check connection', 'error');
+    return;
+  }
+
+  const entries = (rows || [])
+    .map(r => ({ ...r, technique_json: safeParseJson(r.technique_json), repertoire_json: safeParseJson(r.repertoire_json) }))
+    .filter(e => e.session_date >= start && e.session_date <= end)
+    .filter(e => !isJunk(e))
+    .sort((a, b) => (a.session_date + (a.start_time || '')).localeCompare(b.session_date + (b.start_time || '')));
+
+  const totalMins = entries.reduce((sum, e) => sum + durationMins(e), 0);
+  const daySet = new Set(entries.map(e => e.session_date));
+  const daysPracticed = daySet.size;
+  const totalDaysInRange = Math.round((toDateOnly(end) - toDateOnly(start)) / 86400000) + 1;
+
+  const categoryDays = new Map();
+  entries.forEach(e => {
+    deriveLabel(e).forEach(label => {
+      if (!categoryDays.has(label)) categoryDays.set(label, new Set());
+      categoryDays.get(label).add(e.session_date);
+    });
+  });
+  const categoryRows = [...categoryDays.entries()]
+    .sort((a, b) => b[1].size - a[1].size)
+    .map(([label, days]) => `<div class="cat-row"><span>${escapeHtml(label)}</span><span>${days.size} day${days.size === 1 ? '' : 's'}</span></div>`)
+    .join('');
+
+  const byDate = new Map();
+  entries.forEach(e => {
+    if (!byDate.has(e.session_date)) byDate.set(e.session_date, []);
+    byDate.get(e.session_date).push(e);
+  });
+
+  const energyLabelMap = { low: 'Low', good: 'Good', fire: '🔥' };
+  let detailHtml = '';
+  [...byDate.keys()].sort().forEach(date => {
+    const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    detailHtml += `<div class="day-heading">${escapeHtml(dayLabel)}</div>`;
+    byDate.get(date).forEach(e => {
+      const mins = durationMins(e);
+      const labels = deriveLabel(e);
+      const labelStr = labels.length ? labels.join(', ') : 'Session';
+      detailHtml += `<div class="entry-row">
+        <div class="badges">
+          <div class="badge">${escapeHtml(e.start_time || '')}${e.end_time ? '&ndash;' + escapeHtml(e.end_time) : ''} (${fmtMins(mins)})</div>
+          <div class="badge">${escapeHtml(labelStr)}</div>
+          <div class="badge">Energy: ${energyLabelMap[e.energy] || escapeHtml(e.energy || '')}</div>
+        </div>
+        ${e.win ? `<div class="entry-win">${escapeHtml(e.win)}</div>` : ''}
+      </div>`;
+    });
+  });
+
+  const rangeLabel = `${formatDateLabel(start)} &ndash; ${formatDateLabel(end)}`;
+
   let html = `<html><head><title>Practice log</title><style>
     body{font-family:Georgia,serif;color:#2C1810;padding:40px;max-width:700px;margin:auto;}
     h1{font-size:22px;border-bottom:2px solid #2C1810;padding-bottom:10px;margin-bottom:4px;}
-    .meta{font-size:12px;color:#7A5535;margin-bottom:24px;font-style:italic;}
-    .badges{display:flex;gap:16px;margin-bottom:24px;}
-    .badge{font-size:12px;background:#F5EDD8;border:1px solid #C9A87C;padding:4px 10px;border-radius:4px;color:#2C1810;}
-    h2{font-size:14px;letter-spacing:0.08em;text-transform:uppercase;color:#7A5535;margin:20px 0 10px;border-bottom:0.5px solid #D4B896;padding-bottom:6px;}
-    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;}
-    td,th{border:1px solid #E8DFD0;padding:7px 10px;text-align:left;vertical-align:top;}
-    th{background:#FAF6F0;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#7A5535;font-weight:400;}
-    .win{background:#FAF6F0;border:1.5px solid #8B3A1A;border-radius:6px;padding:12px 16px;margin-top:20px;font-style:italic;}
-    .win-label{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#8B3A1A;margin-bottom:4px;}
+    .meta{font-size:12px;color:#7A5535;margin-bottom:20px;font-style:italic;}
+    .summary-grid{display:flex;gap:12px;margin-bottom:18px;}
+    .stat-card{background:#FAF6F0;border:1px solid #C9A87C;border-radius:8px;padding:10px 14px;flex:1;}
+    .stat-label{font-size:10px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;}
+    .stat-value{font-size:20px;color:#8B3A1A;}
+    .cat-heading{font-size:10px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+    .cat-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #E8DFD0;}
+    .section-heading{border-top:1px solid #2C1810;padding-top:14px;margin-top:20px;font-size:13px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;}
+    .day-heading{font-size:13px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px;}
+    .entry-row{margin-bottom:10px;}
+    .badges{display:flex;gap:10px;flex-wrap:wrap;}
+    .badge{font-size:12px;background:#FAF6F0;border:1px solid #C9A87C;padding:4px 10px;border-radius:4px;color:#2C1810;}
+    .entry-win{font-size:12px;font-style:italic;color:#7A5535;margin-top:4px;}
   </style></head><body>
-  <h1>Practice log</h1>
-  <div class="meta">Jon Ward &middot; piano &middot; ${data.session_date}</div>
-  <div class="badges">
-    <div class="badge">Session ${data.session_num}</div>
-    <div class="badge">${data.start_time}${data.end_time ? ' – ' + data.end_time : ''} &nbsp;(${durationEl})</div>
-    <div class="badge">Energy: ${energyLabel}</div>
-  </div>
-  <h2>Technique &mdash; 20 min</h2>
-  <table><tr><th>Technique</th><th>Key / name</th><th>Metronome start → end</th><th>Notes</th></tr>`;
-  techniques.forEach(t => {
-    const r = data.technique_json[t];
-    const bpm = r.bpmstart || r.bpmend ? (r.bpmstart || '?') + ' → ' + (r.bpmend || '?') : '—';
-    let display;
-    if (KEY_GRID_TECHNIQUES.includes(t)) {
-      const keysStr = (r.keys && r.keys.length) ? r.keys.join(', ') : '';
-      display = keysStr ? `${keysStr}${r.scaleType ? ' (' + r.scaleType + ')' : ''}` : '—';
-    } else {
-      display = r.keyname || '—';
-    }
-    html += `<tr><td>${t}</td><td>${display}</td><td>${bpm}</td><td>${r.notes||'—'}</td></tr>`;
-  });
-  html += `</table><h2>Repertoire &mdash; 25 min</h2>
-  <table><tr><th>Repertoire</th><th>Measures / portion</th><th>Notes</th></tr>`;
-  repItems.forEach(r => {
-    const row = data.repertoire_json[r.label];
-    html += `<tr><td>${r.label}</td><td>${row.measures||'—'}</td><td>${row.notes||'—'}</td></tr>`;
-  });
-  html += `</table>`;
-  if (data.win) html += `<div class="win"><div class="win-label">Win of the session</div>${data.win}</div>`;
-  html += `</body></html>`;
+    <h1>Practice log</h1>
+    <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel}</div>
+    <div class="summary-grid">
+      <div class="stat-card"><div class="stat-label">Total time</div><div class="stat-value">${fmtMins(totalMins)}</div></div>
+      <div class="stat-card"><div class="stat-label">Days practiced</div><div class="stat-value">${daysPracticed} / ${totalDaysInRange}</div></div>
+    </div>
+    ${categoryRows ? `<div class="cat-heading">Categories touched</div>${categoryRows}` : ''}
+    <div class="section-heading">Session detail</div>
+    ${detailHtml || '<div style="font-size:13px;color:#7A5535;font-style:italic;">No entries in this range.</div>'}
+  </body></html>`;
+
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
   setTimeout(() => w.print(), 400);
-}
 
-document.getElementById('exportBtn').addEventListener('click', buildPDF);
-document.getElementById('exportBtn2').addEventListener('click', buildPDF);
+  document.getElementById('exportPanel').style.display = 'none';
+  setStatus('Not saved yet');
+}
 
 document.querySelectorAll('input, textarea').forEach(el => {
   el.addEventListener('focus', () => {
