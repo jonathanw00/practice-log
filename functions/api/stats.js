@@ -38,10 +38,11 @@ export async function onRequest(context) {
       db.prepare(`SELECT COALESCE(SUM(${minutesExpr}),0) as minutes FROM sessions WHERE session_date = ?`).bind(date).first(),
       db.prepare(`SELECT COALESCE(SUM(${minutesExpr}),0) as minutes FROM sessions WHERE session_date BETWEEN ? AND ?`).bind(weekStart, weekEnd).first(),
       db.prepare(`SELECT COALESCE(SUM(${minutesExpr}),0) as minutes FROM sessions`).first(),
-      db.prepare(`SELECT start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all()
+      db.prepare(`SELECT id, start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all()
     ]);
 
     const entries = (todayEntries.results || []).map(row => ({
+      id: row.id,
       start_time: row.start_time,
       label: deriveLabel(row.technique_json, row.repertoire_json)
     }));

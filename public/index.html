@@ -43,6 +43,9 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ghost-btn { background: var(--surface); border: 0.5px solid var(--border); color: var(--muted); font-size: 12px; padding: 7px 11px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 .ghost-btn:hover { border-color: var(--accent); color: var(--ink); }
+#deleteBtn { display: none; }
+#deleteBtn.visible { display: inline-block; }
+#deleteBtn:hover { border-color: #c0392b; color: #c0392b; }
 .save-btn { background: var(--ink); color: var(--bg); border: none; font-size: 13px; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: Georgia, serif; white-space: nowrap; }
 .save-btn:hover { opacity: 0.85; }
 .meta-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 80px; gap: 10px; margin-bottom: 14px; }
@@ -56,7 +59,9 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .stat-value { font-family: Georgia, serif; font-size: 17px; color: var(--accent); }
 .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
 .today-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-.strip-chip { background: var(--surface); border: 0.5px solid var(--border); border-radius: 20px; padding: 5px 11px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.strip-chip { background: var(--surface); border: 0.5px solid var(--border); border-radius: 20px; padding: 5px 11px; font-size: 11px; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.strip-chip:hover { border-color: var(--accent); }
+.strip-chip.chip-active { border-color: var(--accent); border-width: 1.5px; color: var(--ink); }
 .strip-chip .chip-time { color: var(--accent); font-family: "Courier New", monospace; margin-right: 6px; }
 .strip-empty { font-size: 11px; color: var(--muted); font-style: italic; padding: 4px 2px; }
 .energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
@@ -117,6 +122,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     <div class="top-actions">
       <button class="ghost-btn" id="modeBtn">🌙 Dark</button>
       <button class="ghost-btn" id="exportBtn">Export PDF</button>
+      <button class="ghost-btn" id="deleteBtn">Delete entry</button>
       <button class="save-btn" id="saveBtn">Save session</button>
     </div>
   </div>
@@ -210,6 +216,11 @@ let sessionNum = 1;
 let energyVal = 'good';
 let isDark = false;
 
+function setCurrentId(id) {
+  currentId = id;
+  document.getElementById('deleteBtn').classList.toggle('visible', !!id);
+}
+
 const techCards = document.getElementById('techCards');
 techniques.forEach((t, i) => {
   const card = document.createElement('div');
@@ -301,7 +312,7 @@ function renderTodayStrip(entries) {
     return;
   }
   el.innerHTML = entries.map(en =>
-    `<div class="strip-chip"><span class="chip-time">${formatTimeLabel(en.start_time)}</span>${en.label}</div>`
+    `<div class="strip-chip${en.id === currentId ? ' chip-active' : ''}" data-id="${en.id}"><span class="chip-time">${formatTimeLabel(en.start_time)}</span>${en.label}</div>`
   ).join('');
 }
 
@@ -331,7 +342,7 @@ async function loadStats() {
 loadStats();
 
 document.getElementById('sessionDate').addEventListener('change', e => {
-  currentId = null;
+  setCurrentId(null);
   fetchSessionCount(e.target.value);
 });
 
@@ -420,7 +431,7 @@ async function doSave(isManual) {
     } else {
       const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const json = await res.json();
-      if (json.id) currentId = json.id;
+      if (json.id) setCurrentId(json.id);
     }
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setStatus('Saved at ' + t, 'saved');
@@ -442,7 +453,7 @@ function hideNewEntryPrompt() {
 }
 
 function newEntry() {
-  currentId = null;
+  setCurrentId(null);
   document.querySelectorAll('#techCards input, #techCards textarea').forEach(el => el.value = '');
   document.querySelectorAll('#repBlocks input, #repBlocks textarea').forEach(el => el.value = '');
   document.getElementById('winField').value = '';
@@ -458,6 +469,73 @@ function newEntry() {
 document.getElementById('newEntryBtn').addEventListener('click', newEntry);
 
 document.getElementById('saveBtn').addEventListener('click', () => doSave(true));
+
+async function loadEntry(id) {
+  try {
+    const res = await fetch(`${API}?id=${id}`);
+    if (!res.ok) return;
+    const row = await res.json();
+    if (!row) return;
+
+    document.getElementById('sessionDate').value = row.session_date || '';
+    document.getElementById('startTime').value = row.start_time || '';
+    document.getElementById('endTime').value = row.end_time || '';
+    calcDuration();
+
+    const tech = JSON.parse(row.technique_json || '{}');
+    techniques.forEach((t, i) => {
+      const v = tech[t] || {};
+      document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value = v.keyname || '';
+      document.querySelector(`[data-field="bpmstart"][data-row="${i}"]`).value = v.bpmstart || '';
+      document.querySelector(`[data-field="bpmend"][data-row="${i}"]`).value = v.bpmend || '';
+      document.querySelector(`[data-field="technotes"][data-row="${i}"]`).value = v.notes || '';
+    });
+
+    const rep = JSON.parse(row.repertoire_json || '{}');
+    repItems.forEach(r => {
+      const v = rep[r.label] || {};
+      document.querySelector(`[data-field="${r.key}-measures"]`).value = v.measures || '';
+      document.querySelector(`[data-field="${r.key}-notes"]`).value = v.notes || '';
+    });
+
+    document.getElementById('winField').value = row.win || '';
+    document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
+    const epEl = document.querySelector(`#energyPips .epip[data-val="${row.energy || 'good'}"]`);
+    if (epEl) epEl.classList.add('active');
+    energyVal = row.energy || 'good';
+
+    setSessionNum(row.session_num || 1);
+    setCurrentId(row.id);
+    hideNewEntryPrompt();
+    setStatus('Editing entry from ' + (row.start_time || row.session_date));
+    loadStats();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    setStatus('Could not load entry — check connection', 'error');
+  }
+}
+
+document.getElementById('todayStrip').addEventListener('click', e => {
+  const chip = e.target.closest('.strip-chip');
+  if (!chip || !chip.dataset.id) return;
+  loadEntry(chip.dataset.id);
+});
+
+async function deleteEntry() {
+  if (!currentId) return;
+  if (!confirm('Delete this entry? This cannot be undone.')) return;
+  try {
+    await fetch(`${API}?id=${currentId}`, { method: 'DELETE' });
+    newEntry();
+    fetchSessionCount(document.getElementById('sessionDate').value);
+    loadStats();
+    setStatus('Entry deleted');
+  } catch (err) {
+    setStatus('Delete failed — check connection', 'error');
+  }
+}
+
+document.getElementById('deleteBtn').addEventListener('click', deleteEntry);
 
 function buildPDF() {
   const data = collectData();

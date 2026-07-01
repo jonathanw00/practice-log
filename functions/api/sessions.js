@@ -6,7 +6,7 @@ export async function onRequest(context) {
 
   const cors = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type"
   };
 
@@ -51,6 +51,13 @@ export async function onRequest(context) {
         JSON.stringify(b.repertoire_json || {}),
         b.id
       ).run();
+      return json({ ok: true }, cors);
+    }
+
+    if (method === "DELETE") {
+      const id = url.searchParams.get("id");
+      if (!id) return json({ error: "id required" }, cors, 400);
+      await db.prepare("DELETE FROM sessions WHERE id = ?").bind(id).run();
       return json({ ok: true }, cors);
     }
 
