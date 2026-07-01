@@ -12,3 +12,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(session_date);
+
+CREATE TABLE IF NOT EXISTS technical_pieces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);

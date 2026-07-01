@@ -83,6 +83,16 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .metro-sep { color: var(--accent); font-size: 12px; }
 .t-notes { background: transparent; border: none; font-size: 12px; color: var(--ink); width: 100%; outline: none; resize: none; font-family: Georgia, serif; font-style: italic; }
 .t-notes::placeholder { color: var(--placeholder); font-style: italic; }
+.key-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.key-chip { width: 32px; height: 28px; border-radius: 6px; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; font-family: "Courier New", monospace; }
+.key-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.type-pips { display: flex; gap: 6px; flex-wrap: wrap; }
+.type-pip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
+.type-pip.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.piece-picker { display: flex; flex-direction: column; gap: 8px; }
+.piece-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.piece-chip { padding: 5px 11px; border-radius: 16px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; background: var(--surface); }
+.piece-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .divider-rep { height: 1px; background: var(--divider); margin: 20px 0; position: relative; }
 .divider-rep::after { content: '— repertoire —'; position: absolute; left: 50%; transform: translateX(-50%); top: -8px; background: var(--bg); padding: 0 10px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; font-family: Georgia, serif; font-style: italic; white-space: nowrap; }
 .rep-block { margin-bottom: 12px; }
@@ -203,7 +213,13 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 <script>
 const API = '/api/sessions';
 const API_STATS = '/api/stats';
+const API_PIECES = '/api/technical-pieces';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
+const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
+const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
+const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios'];
+const PIECE_PICKER_TECHNIQUES = ['Technical piece'];
+let technicalPieces = []; // [{id, name}], fetched from API
 const repItems = [
   { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
   { label: 'Lead sheet', key: 'lead', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
@@ -225,9 +241,31 @@ const techCards = document.getElementById('techCards');
 techniques.forEach((t, i) => {
   const card = document.createElement('div');
   card.className = 't-card';
+
+  let bodyHtml;
+  if (KEY_GRID_TECHNIQUES.includes(t)) {
+    bodyHtml = `
+      <div class="key-grid" data-row="${i}">
+        ${KEYS.map(k => `<div class="key-chip" data-key="${k}">${k}</div>`).join('')}
+      </div>
+      <div class="type-pips" data-row="${i}">
+        ${SCALE_ARPEGGIO_TYPES.map(ty => `<div class="type-pip" data-type="${ty}">${ty}</div>`).join('')}
+      </div>
+    `;
+  } else if (PIECE_PICKER_TECHNIQUES.includes(t)) {
+    bodyHtml = `
+      <div class="piece-picker" data-row="${i}">
+        <div class="piece-chips" data-row="${i}"></div>
+        <input class="t-input" type="text" placeholder="+ Add new piece (press Enter)" data-row="${i}">
+      </div>
+    `;
+  } else {
+    bodyHtml = `<input class="t-input" type="text" placeholder="Key / name" data-field="keyname" data-row="${i}">`;
+  }
+
   card.innerHTML = `
     <div class="t-card-label">${t}</div>
-    <input class="t-input" type="text" placeholder="Key / name" data-field="keyname" data-row="${i}">
+    ${bodyHtml}
     <div class="metro-row">
       <span class="metro-badge">METRO</span>
       <input type="number" placeholder="start" data-field="bpmstart" data-row="${i}">
@@ -238,6 +276,98 @@ techniques.forEach((t, i) => {
   `;
   techCards.appendChild(card);
 });
+
+// One delegated listener handles clicks across all dynamically-built
+// key/type/piece chips, regardless of which row they're in.
+techCards.addEventListener('click', e => {
+  const wrap = document.querySelector('.wrap');
+  const unDim = () => { if (wrap.classList.contains('dimmed')) hideNewEntryPrompt(); };
+
+  const keyChip = e.target.closest('.key-chip');
+  if (keyChip) {
+    keyChip.classList.toggle('active');
+    unDim();
+    scheduleSave();
+    return;
+  }
+
+  const typePip = e.target.closest('.type-pip');
+  if (typePip) {
+    const container = typePip.closest('.type-pips');
+    container.querySelectorAll('.type-pip').forEach(p => p.classList.remove('active'));
+    typePip.classList.add('active');
+    unDim();
+    scheduleSave();
+    return;
+  }
+
+  const pieceChip = e.target.closest('.piece-chip');
+  if (pieceChip) {
+    const container = pieceChip.closest('.piece-chips');
+    container.querySelectorAll('.piece-chip').forEach(p => p.classList.remove('active'));
+    pieceChip.classList.add('active');
+    unDim();
+    scheduleSave();
+    return;
+  }
+});
+
+techCards.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('.piece-picker input');
+  if (!input) return;
+  e.preventDefault();
+  addTechnicalPiece(input);
+});
+
+async function loadTechnicalPieces() {
+  try {
+    const res = await fetch(API_PIECES);
+    if (!res.ok) return;
+    technicalPieces = await res.json();
+    renderPieceChips();
+  } catch (e) {
+    /* silently fail — API may not be bound yet */
+  }
+}
+
+function renderPieceChips() {
+  const idx = techniques.indexOf('Technical piece');
+  if (idx === -1) return;
+  const container = document.querySelector(`.piece-chips[data-row="${idx}"]`);
+  if (!container) return;
+  const activeEl = container.querySelector('.piece-chip.active');
+  const activeName = activeEl ? activeEl.dataset.name : null;
+  container.innerHTML = technicalPieces.map(p =>
+    `<div class="piece-chip${p.name === activeName ? ' active' : ''}" data-name="${p.name.replace(/"/g, '&quot;')}">${p.name}</div>`
+  ).join('');
+}
+
+async function addTechnicalPiece(inputEl) {
+  const name = inputEl.value.trim();
+  if (!name) return;
+  try {
+    const res = await fetch(API_PIECES, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const piece = await res.json();
+    if (!technicalPieces.some(p => p.name === piece.name)) {
+      technicalPieces.push(piece);
+      technicalPieces.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    renderPieceChips();
+    const idx = techniques.indexOf('Technical piece');
+    const container = document.querySelector(`.piece-chips[data-row="${idx}"]`);
+    if (container) {
+      container.querySelectorAll('.piece-chip').forEach(el => el.classList.toggle('active', el.dataset.name === piece.name));
+    }
+    inputEl.value = '';
+    if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
+    scheduleSave();
+  } catch (err) {
+    setStatus('Could not add piece — check connection', 'error');
+  }
+}
+
+loadTechnicalPieces();
 
 const repBlocks = document.getElementById('repBlocks');
 repItems.forEach(r => {
@@ -378,12 +508,21 @@ document.getElementById('modeBtn').addEventListener('click', () => {
 function collectData() {
   const technique = {};
   techniques.forEach((t, i) => {
-    technique[t] = {
-      keyname: document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value,
-      bpmstart: document.querySelector(`[data-field="bpmstart"][data-row="${i}"]`).value,
-      bpmend: document.querySelector(`[data-field="bpmend"][data-row="${i}"]`).value,
-      notes: document.querySelector(`[data-field="technotes"][data-row="${i}"]`).value
-    };
+    const bpmstart = document.querySelector(`[data-field="bpmstart"][data-row="${i}"]`).value;
+    const bpmend = document.querySelector(`[data-field="bpmend"][data-row="${i}"]`).value;
+    const notes = document.querySelector(`[data-field="technotes"][data-row="${i}"]`).value;
+
+    if (KEY_GRID_TECHNIQUES.includes(t)) {
+      const keys = Array.from(document.querySelectorAll(`.key-grid[data-row="${i}"] .key-chip.active`)).map(el => el.dataset.key);
+      const typeEl = document.querySelector(`.type-pips[data-row="${i}"] .type-pip.active`);
+      technique[t] = { keys, scaleType: typeEl ? typeEl.dataset.type : '', bpmstart, bpmend, notes };
+    } else if (PIECE_PICKER_TECHNIQUES.includes(t)) {
+      const chipEl = document.querySelector(`.piece-chips[data-row="${i}"] .piece-chip.active`);
+      technique[t] = { keyname: chipEl ? chipEl.dataset.name : '', bpmstart, bpmend, notes };
+    } else {
+      const keyname = document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value;
+      technique[t] = { keyname, bpmstart, bpmend, notes };
+    }
   });
   const repertoire = {};
   repItems.forEach(r => {
@@ -455,6 +594,7 @@ function hideNewEntryPrompt() {
 function newEntry() {
   setCurrentId(null);
   document.querySelectorAll('#techCards input, #techCards textarea').forEach(el => el.value = '');
+  document.querySelectorAll('#techCards .key-chip.active, #techCards .type-pip.active, #techCards .piece-chip.active').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('#repBlocks input, #repBlocks textarea').forEach(el => el.value = '');
   document.getElementById('winField').value = '';
   document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
@@ -485,7 +625,21 @@ async function loadEntry(id) {
     const tech = JSON.parse(row.technique_json || '{}');
     techniques.forEach((t, i) => {
       const v = tech[t] || {};
-      document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value = v.keyname || '';
+      if (KEY_GRID_TECHNIQUES.includes(t)) {
+        const keys = Array.isArray(v.keys) ? v.keys : [];
+        document.querySelectorAll(`.key-grid[data-row="${i}"] .key-chip`).forEach(el => {
+          el.classList.toggle('active', keys.includes(el.dataset.key));
+        });
+        document.querySelectorAll(`.type-pips[data-row="${i}"] .type-pip`).forEach(el => {
+          el.classList.toggle('active', el.dataset.type === v.scaleType);
+        });
+      } else if (PIECE_PICKER_TECHNIQUES.includes(t)) {
+        document.querySelectorAll(`.piece-chips[data-row="${i}"] .piece-chip`).forEach(el => {
+          el.classList.toggle('active', el.dataset.name === v.keyname);
+        });
+      } else {
+        document.querySelector(`[data-field="keyname"][data-row="${i}"]`).value = v.keyname || '';
+      }
       document.querySelector(`[data-field="bpmstart"][data-row="${i}"]`).value = v.bpmstart || '';
       document.querySelector(`[data-field="bpmend"][data-row="${i}"]`).value = v.bpmend || '';
       document.querySelector(`[data-field="technotes"][data-row="${i}"]`).value = v.notes || '';
@@ -566,7 +720,14 @@ function buildPDF() {
   techniques.forEach(t => {
     const r = data.technique_json[t];
     const bpm = r.bpmstart || r.bpmend ? (r.bpmstart || '?') + ' → ' + (r.bpmend || '?') : '—';
-    html += `<tr><td>${t}</td><td>${r.keyname||'—'}</td><td>${bpm}</td><td>${r.notes||'—'}</td></tr>`;
+    let display;
+    if (KEY_GRID_TECHNIQUES.includes(t)) {
+      const keysStr = (r.keys && r.keys.length) ? r.keys.join(', ') : '';
+      display = keysStr ? `${keysStr}${r.scaleType ? ' (' + r.scaleType + ')' : ''}` : '—';
+    } else {
+      display = r.keyname || '—';
+    }
+    html += `<tr><td>${t}</td><td>${display}</td><td>${bpm}</td><td>${r.notes||'—'}</td></tr>`;
   });
   html += `</table><h2>Repertoire &mdash; 25 min</h2>
   <table><tr><th>Repertoire</th><th>Measures / portion</th><th>Notes</th></tr>`;

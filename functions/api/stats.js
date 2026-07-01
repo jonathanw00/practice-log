@@ -66,7 +66,8 @@ function deriveLabel(techniqueJson, repertoireJson) {
   try {
     const tech = JSON.parse(techniqueJson || '{}');
     for (const [name, v] of Object.entries(tech)) {
-      if (v && (nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) {
+      const hasKeys = Array.isArray(v && v.keys) && v.keys.length > 0;
+      if (v && (hasKeys || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) {
         labels.push(name);
       }
     }
