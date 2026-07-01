@@ -190,16 +190,16 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <input class="meta-input" type="date" id="sessionDate">
     </div>
     <div class="meta-card">
-      <div class="meta-label">Start time</div>
-      <input class="meta-input" type="time" id="startTime">
-    </div>
-    <div class="meta-card">
       <div class="meta-label">End time</div>
       <input class="meta-input" type="time" id="endTime">
     </div>
     <div class="meta-card">
-      <div class="meta-label">Duration</div>
-      <div class="meta-duration" id="duration">—</div>
+      <div class="meta-label">Duration (min)</div>
+      <input class="meta-input" type="number" min="0" step="5" id="duration" placeholder="e.g. 35">
+    </div>
+    <div class="meta-card">
+      <div class="meta-label">Start time</div>
+      <input class="meta-input" type="time" id="startTime" readonly style="background: var(--surface); color: var(--muted); cursor: not-allowed;" title="Calculated from end time minus duration">
     </div>
   </div>
 
@@ -426,9 +426,9 @@ function resetSessionMeta() {
   const n = new Date();
   // Local calendar date. valueAsDate is UTC-based and can land a day off near midnight.
   document.getElementById('sessionDate').value = localDateStr(n);
-  document.getElementById('startTime').value = n.toTimeString().slice(0,5);
-  document.getElementById('endTime').value = '';
-  document.getElementById('duration').textContent = '—';
+  document.getElementById('endTime').value = n.toTimeString().slice(0,5);
+  document.getElementById('duration').value = '';
+  document.getElementById('startTime').value = '';
 }
 
 resetSessionMeta();
@@ -531,18 +531,19 @@ document.getElementById('sessionDate').addEventListener('change', e => {
   fetchSessionCount(e.target.value);
 });
 
-function calcDuration() {
-  const s = document.getElementById('startTime').value;
-  const e = document.getElementById('endTime').value;
-  if (!s || !e) { document.getElementById('duration').textContent = '—'; return; }
-  const [sh,sm] = s.split(':').map(Number);
-  const [eh,em] = e.split(':').map(Number);
-  const diff = (eh*60+em) - (sh*60+sm);
-  if (diff <= 0) { document.getElementById('duration').textContent = '—'; return; }
-  document.getElementById('duration').textContent = diff + ' min';
+function toMins(hhmm) { const [h,m] = hhmm.split(':').map(Number); return h*60+m; }
+function toHHMM(mins) { mins = ((mins % 1440) + 1440) % 1440; const h = Math.floor(mins/60), m = mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+function recalcStart() {
+  const endVal = document.getElementById('endTime').value;
+  const durVal = document.getElementById('duration').value;
+  const startEl = document.getElementById('startTime');
+  if (!endVal || durVal === '') { startEl.value = ''; return; }
+  const mins = Math.max(0, parseInt(durVal, 10) || 0);
+  startEl.value = toHHMM(toMins(endVal) - mins);
 }
-document.getElementById('startTime').addEventListener('change', calcDuration);
-document.getElementById('endTime').addEventListener('change', calcDuration);
+document.getElementById('endTime').addEventListener('change', recalcStart);
+document.getElementById('duration').addEventListener('input', recalcStart);
 
 document.getElementById('energyPips').addEventListener('click', e => {
   const ep = e.target.closest('.epip');
@@ -608,7 +609,11 @@ async function doSave(isManual) {
     const endEl = document.getElementById('endTime');
     if (!endEl.value) {
       endEl.value = new Date().toTimeString().slice(0, 5);
-      calcDuration();
+    }
+    recalcStart();
+    if (!document.getElementById('startTime').value) {
+      setStatus('Enter a duration', 'error');
+      return;
     }
   }
   const data = collectData();
@@ -666,9 +671,11 @@ async function loadEntry(id) {
     if (!row) return;
 
     document.getElementById('sessionDate').value = row.session_date || '';
-    document.getElementById('startTime').value = row.start_time || '';
     document.getElementById('endTime').value = row.end_time || '';
-    calcDuration();
+    document.getElementById('startTime').value = row.start_time || '';
+    document.getElementById('duration').value = (row.start_time && row.end_time)
+      ? Math.max(0, toMins(row.end_time) - toMins(row.start_time))
+      : '';
 
     const tech = JSON.parse(row.technique_json || '{}');
     techniques.forEach((t, i) => {
@@ -770,7 +777,7 @@ document.getElementById('deleteBtn').addEventListener('click', deleteEntry);
 function buildPDF() {
   const data = collectData();
   const energyLabel = { low: 'Low', good: 'Good', fire: '🔥' }[data.energy] || '';
-  const durationEl = document.getElementById('duration').textContent;
+  const durationEl = document.getElementById('duration').value ? document.getElementById('duration').value + ' min' : '—';
   let html = `<html><head><title>Practice log</title><style>
     body{font-family:Georgia,serif;color:#2C1810;padding:40px;max-width:700px;margin:auto;}
     h1{font-size:22px;border-bottom:2px solid #2C1810;padding-bottom:10px;margin-bottom:4px;}
