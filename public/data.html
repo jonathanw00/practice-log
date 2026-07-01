@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice Log — Data</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #F5EDD8; --card: rgba(255,255,255,0.55); --ink: #2C1810; --muted: #7A5535;
+  --border: #C9A87C; --divider: #D4B896; --accent: #8B3A1A; --placeholder: #B8956A;
+  --surface: #EDE0C4; --input-bg: rgba(255,255,255,0.4); --warn: #B5642A;
+  --flag-bg: rgba(181,100,42,0.09); --danger: #c0392b;
+}
+body.dark {
+  --bg: #1C1208; --card: rgba(255,255,255,0.06); --ink: #F0E6D0; --muted: #C9A87C;
+  --border: #5C3E22; --divider: #3E2A14; --accent: #E08060; --placeholder: #8B6040;
+  --surface: #2A1A0C; --input-bg: rgba(255,255,255,0.08); --warn: #D89A5A;
+  --flag-bg: rgba(216,154,90,0.10); --danger: #e07a6a;
+}
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; padding: 24px 20px 80px; transition: background .2s, color .2s; }
+.wrap { max-width: 1160px; margin: 0 auto; }
+
+.auth-gate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.auth-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 12px; padding: 28px 26px; max-width: 320px; width: 100%; text-align: center; }
+.auth-input { width: 100%; background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 15px; color: var(--ink); outline: none; font-family: inherit; }
+.auth-input:focus { border-color: var(--accent); }
+.auth-error { font-size: 12px; color: var(--danger); margin-top: 10px; min-height: 16px; }
+.save-btn { background: var(--ink); color: var(--bg); border: none; font-size: 13px; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: Georgia, serif; white-space: nowrap; }
+.save-btn:hover { opacity: .85; }
+
+.top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+.title { font-family: Georgia, serif; font-size: 24px; font-weight: 400; }
+.sub { font-size: 12px; color: var(--muted); margin-top: 3px; font-style: italic; }
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.ghost-btn { background: var(--surface); border: 0.5px solid var(--border); color: var(--muted); font-size: 12px; padding: 7px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; font-family: inherit; text-decoration: none; display: inline-block; }
+.ghost-btn:hover { border-color: var(--accent); color: var(--ink); }
+
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 16px 0 10px; flex-wrap: wrap; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat-pill { background: var(--card); border: 0.5px solid var(--border); border-radius: 9px; padding: 7px 13px; display: flex; flex-direction: column; }
+.stat-value { font-family: Georgia, serif; font-size: 16px; color: var(--accent); }
+.stat-value.warn { color: var(--warn); }
+.stat-label { font-size: 9.5px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+.tool-btns { display: flex; gap: 8px; align-items: center; }
+.btn-flag { border-color: var(--warn); color: var(--warn); }
+.btn-flag:hover { background: var(--flag-bg); }
+.btn-danger { background: var(--danger); border: none; color: #fff; }
+.btn-danger:hover { opacity: .88; }
+.btn-danger:disabled { opacity: .35; cursor: default; }
+
+.table-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 12px; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 880px; }
+thead th { text-align: left; font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 11px 10px; border-bottom: 0.5px solid var(--border); white-space: nowrap; position: sticky; top: 0; background: var(--bg); }
+tbody td { padding: 7px 10px; border-bottom: 0.5px solid var(--divider); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(139,58,26,0.04); }
+tbody tr.flagged { background: var(--flag-bg); }
+tbody tr.flagged:hover { background: var(--flag-bg); }
+tbody tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+tbody tr.selected { background: rgba(139,58,26,0.10); }
+tbody tr.saving td { opacity: .5; }
+
+.col-check { width: 34px; text-align: center; }
+.col-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.cell-in { background: transparent; border: none; border-bottom: 0.5px solid transparent; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; padding: 3px 2px; width: 100%; border-radius: 3px; }
+.cell-in:hover { border-bottom-color: var(--divider); }
+.cell-in:focus { border-bottom-color: var(--accent); background: var(--input-bg); }
+input.cell-date { width: 130px; font-family: "Courier New", monospace; }
+input.cell-time { width: 62px; font-family: "Courier New", monospace; }
+input.cell-dur { width: 56px; font-family: "Courier New", monospace; color: var(--accent); }
+.dur-unit { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.cell-win { font-family: Georgia, serif; font-style: italic; min-width: 150px; }
+.cell-win::placeholder { color: var(--placeholder); font-style: italic; }
+select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 20px; color: var(--ink); font-size: 11px; padding: 4px 8px; font-family: inherit; cursor: pointer; outline: none; }
+
+.activity { display: flex; align-items: center; gap: 8px; min-width: 170px; flex-wrap: wrap; }
+.activity-label { color: var(--ink); }
+.activity-empty { color: var(--placeholder); font-style: italic; }
+.flag-pill { font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--warn); border: 1px solid var(--warn); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.icon-btn { background: transparent; border: 0.5px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 9px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap; text-decoration: none; display: inline-block; }
+.icon-btn:hover { border-color: var(--accent); color: var(--ink); }
+.icon-btn.del:hover { border-color: var(--danger); color: var(--danger); }
+
+.empty-state, .loading-state { padding: 40px; text-align: center; color: var(--muted); font-style: italic; font-size: 13px; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg); padding: 11px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: 90%; text-align: center; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { background: var(--danger); color: #fff; }
+.foot { font-size: 11px; color: var(--muted); margin-top: 14px; font-style: italic; }
+@media (max-width: 760px) { body { padding: 16px 10px 80px; } }
+</style>
+</head>
+<body>
+
+<div class="auth-gate" id="authGate">
+  <div class="auth-card">
+    <div class="title">Practice log</div>
+    <div class="sub" style="margin-bottom: 18px;">Enter password to continue</div>
+    <input type="password" class="auth-input" id="authInput" placeholder="Password" autocomplete="current-password">
+    <button class="save-btn" id="authSubmit" style="width: 100%; margin-top: 10px;">Unlock</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display: none;">
+  <div class="top-bar">
+    <div>
+      <div class="title">Practice Log · Data</div>
+      <div class="sub">Jon Ward &middot; every entry, editable</div>
+    </div>
+    <div class="top-actions">
+      <a class="ghost-btn" href="./index.html">&larr; Back to log</a>
+      <button class="ghost-btn" id="modeBtn">🌙 Dark</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="stats">
+      <div class="stat-pill"><span class="stat-value" id="statCount">0</span><span class="stat-label">Entries</span></div>
+      <div class="stat-pill"><span class="stat-value" id="statTime">0m</span><span class="stat-label">Total logged</span></div>
+      <div class="stat-pill"><span class="stat-value warn" id="statFlag">0</span><span class="stat-label">Look empty</span></div>
+    </div>
+    <div class="tool-btns">
+      <button class="ghost-btn btn-flag" id="flagBtn">⚑ Select empty</button>
+      <button class="ghost-btn" id="clearBtn">Clear selection</button>
+      <button class="ghost-btn btn-danger" id="delBtn" disabled>Delete selected (0)</button>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-check"><input type="checkbox" id="selAll" title="Select all"></th>
+          <th>Date</th><th>Start</th><th>End</th><th>Duration</th>
+          <th>Activity</th><th>Energy</th><th>Win / note</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="loading-state" id="loadingState">Loading entries&hellip;</div>
+    <div class="empty-state" id="emptyState" style="display:none;">No entries yet.</div>
+  </div>
+
+  <div class="foot">Editing here saves immediately to your live log. "Edit details" opens an entry in the full practice editor for changes to keys, scale type, or repertoire pieces. Editing <b>Duration</b> keeps End time fixed and recalculates Start time.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- shared auth (same key as index.html — a device unlocked there is already unlocked here) ----
+const PASSWORD_KEY = 'practice_log_password';
+const API = '/api/sessions';
+function getStoredPassword() { return localStorage.getItem(PASSWORD_KEY) || ''; }
+function apiFetch(url, options = {}) {
+  const headers = Object.assign({}, options.headers, { 'X-App-Password': getStoredPassword() });
+  return fetch(url, Object.assign({}, options, { headers }));
+}
+async function tryPassword(pw) {
+  try {
+    const res = await fetch(API + '?limit=1', { headers: { 'X-App-Password': pw } });
+    return res.status !== 401;
+  } catch (e) { return false; }
+}
+async function attemptUnlock() {
+  const input = document.getElementById('authInput');
+  const errEl = document.getElementById('authError');
+  const btn = document.getElementById('authSubmit');
+  const pw = input.value;
+  errEl.textContent = '';
+  if (!pw) return;
+  btn.disabled = true; btn.textContent = 'Checking...';
+  const ok = await tryPassword(pw);
+  btn.disabled = false; btn.textContent = 'Unlock';
+  if (ok) { localStorage.setItem(PASSWORD_KEY, pw); showApp(); }
+  else { errEl.textContent = 'Incorrect password'; input.value = ''; input.focus(); }
+}
+function showApp() {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appWrap').style.display = '';
+  initApp();
+}
+document.getElementById('authSubmit').addEventListener('click', attemptUnlock);
+document.getElementById('authInput').addEventListener('keydown', e => { if (e.key === 'Enter') attemptUnlock(); });
+(async function bootstrap() {
+  const stored = getStoredPassword();
+  if (stored) {
+    const ok = await tryPassword(stored);
+    if (ok) { showApp(); return; }
+    localStorage.removeItem(PASSWORD_KEY);
+  }
+  document.getElementById('authInput').focus();
+})();
+
+// ---- data ----
+let entries = [];        // parsed rows: technique_json/repertoire_json as OBJECTS (not raw strings)
+const selected = new Set();
+const savingIds = new Set();
+
+function nonEmpty(v){ return v !== undefined && v !== null && String(v).trim() !== ''; }
+
+// Mirrors functions/_lib.js deriveLabel — a row only "counts" as an activity
+// if that activity's own fields were actually filled in.
+function deriveLabel(e){
+  const out = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    const hasKeys = Array.isArray(v && v.keys) && v.keys.length > 0;
+    if (v && (hasKeys || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) out.push(name);
+  }
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (v && (nonEmpty(v.measures) || nonEmpty(v.notes))) out.push(name);
+  }
+  return out;
+}
+function isJunk(e){ return deriveLabel(e).length === 0 && !nonEmpty(e.win); }
+
+function toMins(hhmm){ const [h,m] = hhmm.split(':').map(Number); return h*60+m; }
+function toHHMM(mins){ mins = ((mins % 1440) + 1440) % 1440; const h = Math.floor(mins/60), m = mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+function nowHHMM(){ return new Date().toTimeString().slice(0,5); }
+function durationMins(e){
+  if (!nonEmpty(e.start_time) || !nonEmpty(e.end_time)) return 0;
+  return Math.max(0, toMins(e.end_time) - toMins(e.start_time));
+}
+function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; return h? `${h}h ${r}m` : `${r}m`; }
+
+const ENERGY = { low: 'low ○', good: 'good ◐', fire: 'fire ●' };
+
+async function fetchAll(){
+  document.getElementById('loadingState').style.display = 'block';
+  try {
+    const res = await apiFetch(`${API}?limit=5000`);
+    const rows = await res.json();
+    entries = (rows || []).map(r => ({
+      ...r,
+      technique_json: safeParse(r.technique_json),
+      repertoire_json: safeParse(r.repertoire_json)
+    }));
+  } catch (err) {
+    toast('Could not load entries — check connection', true);
+    entries = [];
+  }
+  document.getElementById('loadingState').style.display = 'none';
+  render();
+}
+function safeParse(s){ try { return JSON.parse(s || '{}'); } catch(e){ return {}; } }
+
+function getEntry(id){ return entries.find(e => e.id === id); }
+
+async function saveEntry(e){
+  savingIds.add(e.id); render();
+  try {
+    await apiFetch(API, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: e.id, session_date: e.session_date, start_time: e.start_time, end_time: e.end_time,
+        session_num: e.session_num || 1, energy: e.energy, win: e.win,
+        technique_json: e.technique_json, repertoire_json: e.repertoire_json
+      })
+    });
+    toast('Saved');
+  } catch (err) {
+    toast('Save failed — check connection', true);
+  }
+  savingIds.delete(e.id); render();
+}
+
+function render(){
+  const tbody = document.getElementById('tbody');
+  const sorted = [...entries].sort((a,b) => {
+    if (a.session_date !== b.session_date) return b.session_date.localeCompare(a.session_date);
+    return (b.start_time||'').localeCompare(a.start_time||'');
+  });
+  tbody.innerHTML = '';
+  sorted.forEach(e => {
+    const junk = isJunk(e);
+    const labels = deriveLabel(e);
+    const tr = document.createElement('tr');
+    if (junk) tr.classList.add('flagged');
+    if (selected.has(e.id)) tr.classList.add('selected');
+    if (savingIds.has(e.id)) tr.classList.add('saving');
+
+    const activityHtml = labels.length
+      ? `<span class="activity-label">${escapeHtml(labels.join(', '))}</span>`
+      : `<span class="activity-empty">— no activity —</span>` + (junk ? ` <span class="flag-pill">empty</span>` : '');
+
+    tr.innerHTML = `
+      <td class="col-check"><input type="checkbox" data-id="${e.id}" ${selected.has(e.id)?'checked':''}></td>
+      <td><input class="cell-in cell-date" type="date" value="${e.session_date||''}" data-id="${e.id}" data-f="session_date"></td>
+      <td><input class="cell-in cell-time" type="time" value="${e.start_time||''}" data-id="${e.id}" data-f="start_time"></td>
+      <td><input class="cell-in cell-time" type="time" value="${e.end_time||''}" data-id="${e.id}" data-f="end_time"></td>
+      <td><input class="cell-in cell-dur" type="number" min="0" step="5" value="${durationMins(e)}" data-id="${e.id}" data-f="duration"><span class="dur-unit">min</span></td>
+      <td><div class="activity">${activityHtml}</div></td>
+      <td><select class="cell-energy" data-id="${e.id}" data-f="energy">
+        ${Object.keys(ENERGY).map(k=>`<option value="${k}" ${e.energy===k?'selected':''}>${ENERGY[k]}</option>`).join('')}
+      </select></td>
+      <td><input class="cell-in cell-win" type="text" value="${escapeHtml(e.win||'')}" placeholder="—" data-id="${e.id}" data-f="win"></td>
+      <td><div class="row-actions">
+        <a class="icon-btn" href="./index.html?edit=${e.id}">Edit details ▸</a>
+        <button class="icon-btn del" data-del="${e.id}">Delete</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('emptyState').style.display = (entries.length===0) ? 'block' : 'none';
+  updateStats();
+}
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function updateStats(){
+  const total = entries.reduce((s,e)=>s+durationMins(e),0);
+  const flagged = entries.filter(isJunk).length;
+  document.getElementById('statCount').textContent = entries.length;
+  document.getElementById('statTime').textContent = fmtMins(total);
+  document.getElementById('statFlag').textContent = flagged;
+  const n = selected.size;
+  const del = document.getElementById('delBtn');
+  del.textContent = `Delete selected (${n})`;
+  del.disabled = n === 0;
+  document.getElementById('selAll').checked = entries.length>0 && selected.size===entries.length;
+}
+
+// inline edit
+document.getElementById('tbody').addEventListener('change', ev => {
+  const t = ev.target;
+  if (t.type === 'checkbox' && t.dataset.id) {
+    const id = +t.dataset.id;
+    t.checked ? selected.add(id) : selected.delete(id);
+    render();
+    return;
+  }
+  if (!t.dataset.f) return;
+  const e = getEntry(+t.dataset.id);
+  if (!e) return;
+
+  if (t.dataset.f === 'duration') {
+    const mins = Math.max(0, parseInt(t.value, 10) || 0);
+    if (!nonEmpty(e.end_time)) e.end_time = nowHHMM();  // anchor, same as manual Save on the log page
+    e.start_time = toHHMM(toMins(e.end_time) - mins);
+  } else {
+    e[t.dataset.f] = t.value;
+  }
+  saveEntry(e);
+});
+
+// row buttons
+document.getElementById('tbody').addEventListener('click', ev => {
+  const delId = ev.target.dataset.del;
+  if (!delId) return;
+  const id = +delId;
+  if (confirm('Delete this entry? This can\u2019t be undone.')) deleteEntries([id]);
+});
+
+async function deleteEntries(ids){
+  try {
+    await Promise.all(ids.map(id => apiFetch(`${API}?id=${id}`, { method: 'DELETE' })));
+    entries = entries.filter(e => !ids.includes(e.id));
+    ids.forEach(id => selected.delete(id));
+    render();
+    toast(ids.length === 1 ? 'Entry deleted' : `Deleted ${ids.length} entries`);
+  } catch (err) {
+    toast('Delete failed — check connection', true);
+  }
+}
+
+document.getElementById('selAll').addEventListener('change', ev => {
+  selected.clear();
+  if (ev.target.checked) entries.forEach(e => selected.add(e.id));
+  render();
+});
+document.getElementById('flagBtn').addEventListener('click', () => {
+  const flagged = entries.filter(isJunk);
+  if (!flagged.length) { toast('No empty-looking entries found'); return; }
+  flagged.forEach(e => selected.add(e.id));
+  render();
+  toast(`Selected ${flagged.length} empty-looking ${flagged.length===1?'entry':'entries'} — review, then Delete selected`);
+});
+document.getElementById('clearBtn').addEventListener('click', () => { selected.clear(); render(); });
+document.getElementById('delBtn').addEventListener('click', () => {
+  const ids = [...selected];
+  if (!ids.length) return;
+  if (confirm(`Delete ${ids.length} selected ${ids.length===1?'entry':'entries'}? This can\u2019t be undone.`)) deleteEntries(ids);
+});
+
+document.getElementById('modeBtn').addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+  document.getElementById('modeBtn').textContent = document.body.classList.contains('dark') ? '☀ Light' : '🌙 Dark';
+});
+
+let toastT;
+function toast(msg, isError){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+function initApp(){ fetchAll(); }
+</script>
+</body>
+</html>

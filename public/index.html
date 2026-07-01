@@ -832,6 +832,9 @@ function initApp() {
   loadTechnicalPieces();
   fetchSessionCount(document.getElementById('sessionDate').value);
   loadStats();
+  // Deep link from the data page's "Edit details" (data.html?edit=<id> -> index.html?edit=<id>)
+  const editId = new URLSearchParams(window.location.search).get('edit');
+  if (editId) loadEntry(editId);
 }
 
 function showApp() {
