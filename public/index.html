@@ -567,6 +567,18 @@ function durationMins(e){
   return Math.max(0, toMins(e.end_time) - toMins(e.start_time));
 }
 function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; return h? `${h}h ${r}m` : `${r}m`; }
+function formatTime12(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const period = h >= 12 ? 'p' : 'a';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2,'0')}${period}`;
+}
+function formatTimeRange(e) {
+  if (!e.start_time) return '';
+  if (!e.end_time) return formatTime12(e.start_time);
+  return `${formatTime12(e.start_time)}\u2013${formatTime12(e.end_time)}`;
+}
 
 function recalcStart() {
   const endVal = document.getElementById('endTime').value;
@@ -892,12 +904,12 @@ async function buildRangeReport() {
       const labels = deriveLabel(e);
       const labelStr = labels.length ? labels.join(', ') : 'Session';
       detailHtml += `<div class="entry-row">
-        <div class="badges">
-          <div class="badge">${escapeHtml(e.start_time || '')}${e.end_time ? '&ndash;' + escapeHtml(e.end_time) : ''} (${fmtMins(mins)})</div>
-          <div class="badge">${escapeHtml(labelStr)}</div>
-          <div class="badge">Energy: ${energyLabelMap[e.energy] || escapeHtml(e.energy || '')}</div>
+        <div class="stat-block"><span class="stat-num">${mins}</span><span class="stat-unit">min</span></div>
+        <div class="entry-info">
+          <span class="entry-activity">${escapeHtml(labelStr)}</span>
+          <span class="entry-meta">${escapeHtml(formatTimeRange(e))}, ${energyLabelMap[e.energy] || escapeHtml(e.energy || '')}</span>
+          ${e.win ? `<div class="entry-win">${escapeHtml(e.win)}</div>` : ''}
         </div>
-        ${e.win ? `<div class="entry-win">${escapeHtml(e.win)}</div>` : ''}
       </div>`;
     });
   });
@@ -916,9 +928,12 @@ async function buildRangeReport() {
     .cat-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:0.5px solid #E8DFD0;}
     .section-heading{border-top:1px solid #2C1810;padding-top:14px;margin-top:20px;font-size:13px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;}
     .day-heading{font-size:13px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px;}
-    .entry-row{margin-bottom:10px;}
-    .badges{display:flex;gap:10px;flex-wrap:wrap;}
-    .badge{font-size:12px;background:#FAF6F0;border:1px solid #C9A87C;padding:4px 10px;border-radius:4px;color:#2C1810;}
+    .entry-row{display:flex;align-items:center;gap:16px;margin-bottom:12px;}
+    .stat-block{text-align:center;min-width:30px;flex-shrink:0;}
+    .stat-num{font-size:22px;color:#8B3A1A;display:block;line-height:1;}
+    .stat-unit{font-size:9px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;}
+    .entry-activity{font-weight:bold;}
+    .entry-meta{color:#7A5535;font-size:12px;display:block;}
     .entry-win{font-size:12px;font-style:italic;color:#7A5535;margin-top:4px;}
   </style></head><body>
     <h1>Practice log</h1>
