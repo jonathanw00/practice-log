@@ -51,6 +51,14 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
 .meta-duration { font-size: 15px; color: var(--accent); font-family: "Courier New", monospace; min-height: 22px; }
 .session-energy-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.stats-bar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.stat-pill { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 8px 14px; display: flex; flex-direction: column; align-items: flex-start; min-width: 78px; flex: 1; }
+.stat-value { font-family: Georgia, serif; font-size: 17px; color: var(--accent); }
+.stat-label { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+.today-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.strip-chip { background: var(--surface); border: 0.5px solid var(--border); border-radius: 20px; padding: 5px 11px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.strip-chip .chip-time { color: var(--accent); font-family: "Courier New", monospace; margin-right: 6px; }
+.strip-empty { font-size: 11px; color: var(--muted); font-style: italic; padding: 4px 2px; }
 .energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .energy-pips { display: flex; gap: 6px; margin-top: 6px; }
 .epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
@@ -113,6 +121,22 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     </div>
   </div>
 
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-pill">
+      <div class="stat-value" id="statToday">—</div>
+      <div class="stat-label">Today</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-value" id="statWeek">—</div>
+      <div class="stat-label">This week</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-value" id="statAllTime">—</div>
+      <div class="stat-label">All-time</div>
+    </div>
+  </div>
+  <div class="today-strip" id="todayStrip"></div>
+
   <div class="meta-grid">
     <div class="meta-card">
       <div class="meta-label">Date</div>
@@ -172,6 +196,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 
 <script>
 const API = '/api/sessions';
+const API_STATS = '/api/stats';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
 const repItems = [
   { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
@@ -245,6 +270,65 @@ async function fetchSessionCount(date) {
 }
 
 fetchSessionCount(document.getElementById('sessionDate').value);
+
+// Matches how <input type="date">.valueAsDate/.value round-trips a Date,
+// so "today" here always agrees with whatever session_date gets saved.
+function localDateStr(d) {
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function formatMinutes(mins) {
+  const m = Math.max(0, Math.round(mins || 0));
+  if (m === 0) return '0m';
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return h > 0 ? `${h}h ${rem}m` : `${rem}m`;
+}
+
+function formatTimeLabel(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function renderTodayStrip(entries) {
+  const el = document.getElementById('todayStrip');
+  if (!entries.length) {
+    el.innerHTML = '<div class="strip-empty">Nothing logged yet today</div>';
+    return;
+  }
+  el.innerHTML = entries.map(en =>
+    `<div class="strip-chip"><span class="chip-time">${formatTimeLabel(en.start_time)}</span>${en.label}</div>`
+  ).join('');
+}
+
+async function loadStats() {
+  const today = new Date();
+  const dow = today.getDay(); // 0 = Sunday
+  const weekStartDate = new Date(today); weekStartDate.setDate(today.getDate() - dow);
+  const weekEndDate = new Date(today); weekEndDate.setDate(today.getDate() + (6 - dow));
+  const params = new URLSearchParams({
+    date: localDateStr(today),
+    weekStart: localDateStr(weekStartDate),
+    weekEnd: localDateStr(weekEndDate)
+  });
+  try {
+    const res = await fetch(`${API_STATS}?${params}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('statToday').textContent = formatMinutes(data.todayMinutes);
+    document.getElementById('statWeek').textContent = formatMinutes(data.weekMinutes);
+    document.getElementById('statAllTime').textContent = formatMinutes(data.allTimeMinutes);
+    renderTodayStrip(data.todayEntries || []);
+  } catch (e) {
+    /* silently fail — API may not be bound yet */
+  }
+}
+
+loadStats();
 
 document.getElementById('sessionDate').addEventListener('change', e => {
   currentId = null;
@@ -322,6 +406,13 @@ function scheduleSave() {
 }
 
 async function doSave(isManual) {
+  if (isManual) {
+    const endEl = document.getElementById('endTime');
+    if (!endEl.value) {
+      endEl.value = new Date().toTimeString().slice(0, 5);
+      calcDuration();
+    }
+  }
   const data = collectData();
   try {
     if (currentId) {
@@ -333,6 +424,7 @@ async function doSave(isManual) {
     }
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setStatus('Saved at ' + t, 'saved');
+    loadStats();
     if (isManual) showNewEntryPrompt();
   } catch(err) {
     setStatus('Save failed — check connection', 'error');
