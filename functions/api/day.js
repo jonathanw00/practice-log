@@ -1,7 +1,7 @@
 import { MINUTES_EXPR, deriveLabel, corsHeaders, json } from '../_lib.js';
 
-// Computes practice-time stats (minutes) via SQL aggregates rather than
-// pulling full history into the worker — stays fast as entries pile up.
+// Powers the History view — same shape of data as "today" in stats.js,
+// but for a date the user picks rather than always the current day.
 export async function onRequest(context) {
   const { request, env } = context;
   const db = env.practice_log;
@@ -14,31 +14,20 @@ export async function onRequest(context) {
 
   try {
     const date = url.searchParams.get("date");
-    const weekStart = url.searchParams.get("weekStart");
-    const weekEnd = url.searchParams.get("weekEnd");
-    if (!date || !weekStart || !weekEnd) {
-      return json({ error: "date, weekStart, weekEnd query params required" }, cors, 400);
-    }
+    if (!date) return json({ error: "date query param required" }, cors, 400);
 
-    const [todayRow, weekRow, allTimeRow, todayEntries] = await Promise.all([
+    const [minutesRow, rows] = await Promise.all([
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date = ?`).bind(date).first(),
-      db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date BETWEEN ? AND ?`).bind(weekStart, weekEnd).first(),
-      db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions`).first(),
       db.prepare(`SELECT id, start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all()
     ]);
 
-    const entries = (todayEntries.results || []).map(row => ({
+    const entries = (rows.results || []).map(row => ({
       id: row.id,
       start_time: row.start_time,
       label: deriveLabel(row.technique_json, row.repertoire_json)
     }));
 
-    return json({
-      todayMinutes: todayRow?.minutes || 0,
-      weekMinutes: weekRow?.minutes || 0,
-      allTimeMinutes: allTimeRow?.minutes || 0,
-      todayEntries: entries
-    }, cors);
+    return json({ minutes: minutesRow?.minutes || 0, entries }, cors);
   } catch (err) {
     return json({ error: err.message }, cors, 500);
   }

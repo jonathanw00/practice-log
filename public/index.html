@@ -64,6 +64,16 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .strip-chip.chip-active { border-color: var(--accent); border-width: 1.5px; color: var(--ink); }
 .strip-chip .chip-time { color: var(--accent); font-family: "Courier New", monospace; margin-right: 6px; }
 .strip-empty { font-size: 11px; color: var(--muted); font-style: italic; padding: 4px 2px; }
+.history-panel { display: none; margin-top: 10px; margin-bottom: 18px; padding: 12px 14px; background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; }
+.history-panel.open { display: block; }
+.history-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.history-controls input[type="date"] { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--ink); font-family: inherit; }
+.history-summary { font-size: 12px; color: var(--accent); font-family: Georgia, serif; margin-bottom: 8px; }
+.auth-gate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.auth-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 12px; padding: 28px 26px; max-width: 320px; width: 100%; text-align: center; }
+.auth-input { width: 100%; background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 15px; color: var(--ink); outline: none; font-family: inherit; }
+.auth-input:focus { border-color: var(--accent); }
+.auth-error { font-size: 12px; color: #c0392b; margin-top: 10px; min-height: 16px; }
 .energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .energy-pips { display: flex; gap: 6px; margin-top: 6px; }
 .epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
@@ -123,7 +133,17 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="auth-gate" id="authGate">
+  <div class="auth-card">
+    <div class="title">Practice log</div>
+    <div class="sub" style="margin-bottom: 18px;">Enter password to continue</div>
+    <input type="password" class="auth-input" id="authInput" placeholder="Password" autocomplete="current-password">
+    <button class="save-btn" id="authSubmit" style="width: 100%; margin-top: 10px;">Unlock</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display: none;">
   <div class="top-bar">
     <div>
       <div class="title">Practice log</div>
@@ -152,6 +172,16 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     </div>
   </div>
   <div class="today-strip" id="todayStrip"></div>
+
+  <button class="ghost-btn" id="historyToggle">📖 View other days</button>
+  <div class="history-panel" id="historyPanel">
+    <div class="history-controls">
+      <input type="date" class="meta-input" id="historyDate">
+      <button class="ghost-btn" id="historyBack">Back to today</button>
+    </div>
+    <div class="history-summary" id="historySummary"></div>
+    <div class="today-strip" id="historyStrip"></div>
+  </div>
 
   <div class="meta-grid">
     <div class="meta-card">
@@ -213,12 +243,25 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 <script>
 const API = '/api/sessions';
 const API_STATS = '/api/stats';
+const API_DAY = '/api/day';
 const API_PIECES = '/api/technical-pieces';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
 const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
 const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
 const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios'];
 const PIECE_PICKER_TECHNIQUES = ['Technical piece'];
+const PASSWORD_KEY = 'practice_log_password';
+
+function getStoredPassword() {
+  return localStorage.getItem(PASSWORD_KEY) || '';
+}
+
+// Every call to our own API goes through this, so the auth header only
+// has to be attached in one place.
+function apiFetch(url, options = {}) {
+  const headers = Object.assign({}, options.headers, { 'X-App-Password': getStoredPassword() });
+  return fetch(url, Object.assign({}, options, { headers }));
+}
 let technicalPieces = []; // [{id, name}], fetched from API
 const repItems = [
   { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
@@ -322,7 +365,7 @@ techCards.addEventListener('keydown', e => {
 
 async function loadTechnicalPieces() {
   try {
-    const res = await fetch(API_PIECES);
+    const res = await apiFetch(API_PIECES);
     if (!res.ok) return;
     technicalPieces = await res.json();
     renderPieceChips();
@@ -347,7 +390,7 @@ async function addTechnicalPiece(inputEl) {
   const name = inputEl.value.trim();
   if (!name) return;
   try {
-    const res = await fetch(API_PIECES, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const res = await apiFetch(API_PIECES, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
     const piece = await res.json();
     if (!technicalPieces.some(p => p.name === piece.name)) {
       technicalPieces.push(piece);
@@ -367,7 +410,7 @@ async function addTechnicalPiece(inputEl) {
   }
 }
 
-loadTechnicalPieces();
+// called from initApp() after auth succeeds
 
 const repBlocks = document.getElementById('repBlocks');
 repItems.forEach(r => {
@@ -400,7 +443,7 @@ function setSessionNum(n) {
 async function fetchSessionCount(date) {
   if (!date) return;
   try {
-    const res = await fetch(API + '?limit=50');
+    const res = await apiFetch(API + '?limit=50');
     if (!res.ok) return;
     const rows = await res.json();
     const todays = rows.filter(r => r.session_date === date);
@@ -410,7 +453,7 @@ async function fetchSessionCount(date) {
   }
 }
 
-fetchSessionCount(document.getElementById('sessionDate').value);
+// called from initApp() after auth succeeds
 
 // Matches how <input type="date">.valueAsDate/.value round-trips a Date,
 // so "today" here always agrees with whatever session_date gets saved.
@@ -435,10 +478,10 @@ function formatTimeLabel(hhmm) {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-function renderTodayStrip(entries) {
-  const el = document.getElementById('todayStrip');
+function renderEntryChips(containerId, entries, emptyMessage) {
+  const el = document.getElementById(containerId);
   if (!entries.length) {
-    el.innerHTML = '<div class="strip-empty">Nothing logged yet today</div>';
+    el.innerHTML = `<div class="strip-empty">${emptyMessage}</div>`;
     return;
   }
   el.innerHTML = entries.map(en =>
@@ -457,19 +500,32 @@ async function loadStats() {
     weekEnd: localDateStr(weekEndDate)
   });
   try {
-    const res = await fetch(`${API_STATS}?${params}`);
+    const res = await apiFetch(`${API_STATS}?${params}`);
     if (!res.ok) return;
     const data = await res.json();
     document.getElementById('statToday').textContent = formatMinutes(data.todayMinutes);
     document.getElementById('statWeek').textContent = formatMinutes(data.weekMinutes);
     document.getElementById('statAllTime').textContent = formatMinutes(data.allTimeMinutes);
-    renderTodayStrip(data.todayEntries || []);
+    renderEntryChips('todayStrip', data.todayEntries || [], 'Nothing logged yet today');
   } catch (e) {
     /* silently fail — API may not be bound yet */
   }
 }
 
-loadStats();
+async function loadHistoryDay(date) {
+  if (!date) return;
+  try {
+    const res = await apiFetch(`${API_DAY}?date=${date}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('historySummary').textContent = formatMinutes(data.minutes) + ' practiced';
+    renderEntryChips('historyStrip', data.entries || [], 'Nothing logged that day');
+  } catch (e) {
+    /* silently fail — API may not be bound yet */
+  }
+}
+
+// called from initApp() after auth succeeds
 
 document.getElementById('sessionDate').addEventListener('change', e => {
   setCurrentId(null);
@@ -566,9 +622,9 @@ async function doSave(isManual) {
   const data = collectData();
   try {
     if (currentId) {
-      await fetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId, ...data }) });
+      await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId, ...data }) });
     } else {
-      const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const res = await apiFetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const json = await res.json();
       if (json.id) setCurrentId(json.id);
     }
@@ -612,7 +668,7 @@ document.getElementById('saveBtn').addEventListener('click', () => doSave(true))
 
 async function loadEntry(id) {
   try {
-    const res = await fetch(`${API}?id=${id}`);
+    const res = await apiFetch(`${API}?id=${id}`);
     if (!res.ok) return;
     const row = await res.json();
     if (!row) return;
@@ -663,23 +719,51 @@ async function loadEntry(id) {
     hideNewEntryPrompt();
     setStatus('Editing entry from ' + (row.start_time || row.session_date));
     loadStats();
+    if (document.getElementById('historyPanel').classList.contains('open')) {
+      loadHistoryDay(document.getElementById('historyDate').value);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (err) {
     setStatus('Could not load entry — check connection', 'error');
   }
 }
 
-document.getElementById('todayStrip').addEventListener('click', e => {
-  const chip = e.target.closest('.strip-chip');
-  if (!chip || !chip.dataset.id) return;
-  loadEntry(chip.dataset.id);
+function wireEntryChipClicks(containerId) {
+  document.getElementById(containerId).addEventListener('click', e => {
+    const chip = e.target.closest('.strip-chip');
+    if (!chip || !chip.dataset.id) return;
+    loadEntry(chip.dataset.id);
+  });
+}
+wireEntryChipClicks('todayStrip');
+wireEntryChipClicks('historyStrip');
+
+document.getElementById('historyToggle').addEventListener('click', () => {
+  const panel = document.getElementById('historyPanel');
+  const opening = !panel.classList.contains('open');
+  panel.classList.toggle('open', opening);
+  document.getElementById('todayStrip').style.display = opening ? 'none' : '';
+  if (opening) {
+    const dateInput = document.getElementById('historyDate');
+    if (!dateInput.value) dateInput.value = localDateStr(new Date());
+    loadHistoryDay(dateInput.value);
+  }
+});
+
+document.getElementById('historyDate').addEventListener('change', e => {
+  loadHistoryDay(e.target.value);
+});
+
+document.getElementById('historyBack').addEventListener('click', () => {
+  document.getElementById('historyPanel').classList.remove('open');
+  document.getElementById('todayStrip').style.display = '';
 });
 
 async function deleteEntry() {
   if (!currentId) return;
   if (!confirm('Delete this entry? This cannot be undone.')) return;
   try {
-    await fetch(`${API}?id=${currentId}`, { method: 'DELETE' });
+    await apiFetch(`${API}?id=${currentId}`, { method: 'DELETE' });
     newEntry();
     fetchSessionCount(document.getElementById('sessionDate').value);
     loadStats();
@@ -753,6 +837,66 @@ document.querySelectorAll('input, textarea').forEach(el => {
     if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
   });
 });
+
+function initApp() {
+  loadTechnicalPieces();
+  fetchSessionCount(document.getElementById('sessionDate').value);
+  loadStats();
+}
+
+function showApp() {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appWrap').style.display = '';
+  initApp();
+}
+
+async function tryPassword(pw) {
+  try {
+    const res = await fetch(API + '?limit=1', { headers: { 'X-App-Password': pw } });
+    return res.status !== 401;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function attemptUnlock() {
+  const input = document.getElementById('authInput');
+  const errEl = document.getElementById('authError');
+  const btn = document.getElementById('authSubmit');
+  const pw = input.value;
+  errEl.textContent = '';
+  if (!pw) return;
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+  const ok = await tryPassword(pw);
+  btn.disabled = false;
+  btn.textContent = 'Unlock';
+  if (ok) {
+    localStorage.setItem(PASSWORD_KEY, pw);
+    showApp();
+  } else {
+    errEl.textContent = 'Incorrect password';
+    input.value = '';
+    input.focus();
+  }
+}
+
+document.getElementById('authSubmit').addEventListener('click', attemptUnlock);
+document.getElementById('authInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptUnlock();
+});
+
+// If a password is already stored on this device, verify it silently and
+// skip straight to the app instead of making the user re-type it.
+(async function bootstrap() {
+  const stored = getStoredPassword();
+  if (stored) {
+    const ok = await tryPassword(stored);
+    if (ok) { showApp(); return; }
+    localStorage.removeItem(PASSWORD_KEY);
+  }
+  document.getElementById('authInput').focus();
+})();
 </script>
 </body>
 </html>
