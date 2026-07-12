@@ -204,14 +204,15 @@ function nonEmpty(v){ return v !== undefined && v !== null && String(v).trim() !
 
 // Mirrors functions/_lib.js deriveLabel — a row only "counts" as an activity
 // if that activity's own fields were actually filled in.
+function hasPieces(v){ return Array.isArray(v && v.pieces) && v.pieces.some(p => nonEmpty(p && p.name)); }
 function deriveLabel(e){
   const out = [];
   for (const [name, v] of Object.entries(e.technique_json || {})) {
     const hasKeys = Array.isArray(v && v.keys) && v.keys.length > 0;
-    if (v && (hasKeys || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) out.push(name);
+    if (v && (hasKeys || hasPieces(v) || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) out.push(name);
   }
   for (const [name, v] of Object.entries(e.repertoire_json || {})) {
-    if (v && (nonEmpty(v.measures) || nonEmpty(v.notes))) out.push(name);
+    if (v && (hasPieces(v) || nonEmpty(v.measures) || nonEmpty(v.notes))) out.push(name);
   }
   return out;
 }

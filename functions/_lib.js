@@ -16,13 +16,23 @@ export const MINUTES_EXPR = `
 // A row is only "about" an activity if that activity's fields were actually
 // filled in — the technique/repertoire JSON blobs always contain every key,
 // mostly empty, since one row = one micro-entry logging just one activity.
+//
+// `pieces` is an array of { name, bpmstart?, bpmend?, measures? } — the
+// multi-select piece picker shape used by Technical piece / Traditionally
+// notated / Lead sheet. Older rows instead have a single `keyname` (technical
+// pieces) or `measures` (repertoire) at the top level; both are still checked
+// so history predating the picker still renders correctly.
+export function hasPieces(v) {
+  return Array.isArray(v && v.pieces) && v.pieces.some(p => nonEmpty(p && p.name));
+}
+
 export function deriveLabel(techniqueJson, repertoireJson) {
   const labels = [];
   try {
     const tech = JSON.parse(techniqueJson || '{}');
     for (const [name, v] of Object.entries(tech)) {
       const hasKeys = Array.isArray(v && v.keys) && v.keys.length > 0;
-      if (v && (hasKeys || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) {
+      if (v && (hasKeys || hasPieces(v) || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) {
         labels.push(name);
       }
     }
@@ -30,7 +40,7 @@ export function deriveLabel(techniqueJson, repertoireJson) {
   try {
     const rep = JSON.parse(repertoireJson || '{}');
     for (const [name, v] of Object.entries(rep)) {
-      if (v && (nonEmpty(v.measures) || nonEmpty(v.notes))) {
+      if (v && (hasPieces(v) || nonEmpty(v.measures) || nonEmpty(v.notes))) {
         labels.push(name);
       }
     }

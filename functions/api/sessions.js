@@ -1,14 +1,12 @@
+import { corsHeaders, json } from '../_lib.js';
+
 export async function onRequest(context) {
   const { request, env } = context;
   const db = env.practice_log;
   const url = new URL(request.url);
   const method = request.method;
 
-  const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-App-Password"
-  };
+  const cors = corsHeaders("GET, POST, PUT, DELETE, OPTIONS");
 
   if (method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -65,11 +63,4 @@ export async function onRequest(context) {
   } catch(err) {
     return json({ error: err.message }, cors, 500);
   }
-}
-
-function json(data, cors, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...cors }
-  });
 }
