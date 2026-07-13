@@ -186,6 +186,10 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <div class="stat-label">Today</div>
     </div>
     <div class="stat-pill">
+      <div class="stat-value" id="statStreak">—</div>
+      <div class="stat-label">Streak</div>
+    </div>
+    <div class="stat-pill">
       <div class="stat-value" id="statWeek">—</div>
       <div class="stat-label">This week</div>
     </div>
@@ -580,6 +584,8 @@ async function loadStats() {
     if (!res.ok) return;
     const data = await res.json();
     document.getElementById('statToday').textContent = formatMinutes(data.todayMinutes);
+    const streak = data.streakDays || 0;
+    document.getElementById('statStreak').textContent = `${streak} day${streak === 1 ? '' : 's'}`;
     document.getElementById('statWeek').textContent = formatMinutes(data.weekMinutes);
     document.getElementById('statAllTime').textContent = formatMinutes(data.allTimeMinutes);
     renderEntryChips('todayStrip', data.todayEntries || [], 'Nothing logged yet today');

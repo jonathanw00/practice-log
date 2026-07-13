@@ -1,4 +1,4 @@
-import { MINUTES_EXPR, deriveLabel, corsHeaders, json } from '../_lib.js';
+import { MINUTES_EXPR, deriveLabel, computeStreak, corsHeaders, json } from '../_lib.js';
 
 // Computes practice-time stats (minutes) via SQL aggregates rather than
 // pulling full history into the worker — stays fast as entries pile up.
@@ -20,11 +20,12 @@ export async function onRequest(context) {
       return json({ error: "date, weekStart, weekEnd query params required" }, cors, 400);
     }
 
-    const [todayRow, weekRow, allTimeRow, todayEntries] = await Promise.all([
+    const [todayRow, weekRow, allTimeRow, todayEntries, practiceDates] = await Promise.all([
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date = ?`).bind(date).first(),
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date BETWEEN ? AND ?`).bind(weekStart, weekEnd).first(),
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions`).first(),
-      db.prepare(`SELECT id, start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all()
+      db.prepare(`SELECT id, start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all(),
+      db.prepare(`SELECT DISTINCT session_date FROM sessions WHERE (${MINUTES_EXPR}) > 0 ORDER BY session_date DESC LIMIT 400`).all()
     ]);
 
     const entries = (todayEntries.results || []).map(row => ({
@@ -33,10 +34,13 @@ export async function onRequest(context) {
       label: deriveLabel(row.technique_json, row.repertoire_json)
     }));
 
+    const streakDays = computeStreak((practiceDates.results || []).map(r => r.session_date), date);
+
     return json({
       todayMinutes: todayRow?.minutes || 0,
       weekMinutes: weekRow?.minutes || 0,
       allTimeMinutes: allTimeRow?.minutes || 0,
+      streakDays,
       todayEntries: entries
     }, cors);
   } catch (err) {

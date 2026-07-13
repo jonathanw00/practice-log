@@ -48,6 +48,21 @@ export function deriveLabel(techniqueJson, repertoireJson) {
   return labels.length ? labels.join(', ') : 'Session';
 }
 
+// Consecutive-day practice streak, counted backward from today. If today has
+// no logged practice yet, today doesn't break the streak (the day isn't over)
+// — counting instead starts from yesterday.
+export function computeStreak(dates, todayStr) {
+  const set = new Set(dates);
+  const cursor = new Date(todayStr + 'T00:00:00Z');
+  if (!set.has(todayStr)) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  let streak = 0;
+  while (set.has(cursor.toISOString().slice(0, 10))) {
+    streak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}
+
 export function nonEmpty(val) {
   return val !== undefined && val !== null && String(val).trim() !== '';
 }
