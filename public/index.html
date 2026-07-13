@@ -632,6 +632,46 @@ function deriveLabel(e){
   return out;
 }
 
+// Mirrors deriveLabel's inclusion rules exactly (same activities "count"),
+// but also extracts what was specifically practiced — piece names (with BPM
+// or measures), keys + scale type, or a chord-progression key — so the
+// range-report export shows more than just a bare category name.
+function activityDetails(e) {
+  const out = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    if (!v) continue;
+    const hasKeys = Array.isArray(v.keys) && v.keys.length > 0;
+    if (!(hasKeys || hasPieces(v) || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) continue;
+    let detail = '';
+    if (hasKeys) {
+      detail = v.keys.join(', ') + (nonEmpty(v.scaleType) ? ` (${v.scaleType})` : '');
+    } else if (hasPieces(v)) {
+      detail = v.pieces.filter(p => nonEmpty(p && p.name)).map(p => {
+        const bpm = (nonEmpty(p.bpmstart) || nonEmpty(p.bpmend)) ? ` (${p.bpmstart || '?'}→${p.bpmend || '?'} bpm)` : '';
+        return `${p.name}${bpm}`;
+      }).join(', ');
+    } else if (nonEmpty(v.keyname)) {
+      detail = v.keyname;
+    }
+    out.push({ name, detail });
+  }
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (!v) continue;
+    if (!(hasPieces(v) || nonEmpty(v.measures) || nonEmpty(v.notes))) continue;
+    let detail = '';
+    if (hasPieces(v)) {
+      detail = v.pieces.filter(p => nonEmpty(p && p.name)).map(p => {
+        const meas = nonEmpty(p.measures) ? ` (${p.measures})` : '';
+        return `${p.name}${meas}`;
+      }).join(', ');
+    } else if (nonEmpty(v.measures)) {
+      detail = v.measures;
+    }
+    out.push({ name, detail });
+  }
+  return out;
+}
+
 // Collects every non-empty notes field across technique + repertoire, tagged
 // with which activity it came from — used by the range-report export so
 // notes are visible in one place regardless of which section they're under.
@@ -1020,19 +1060,21 @@ async function buildRangeReport() {
   const energyLabelMap = { low: 'Low', good: 'Good', fire: '🔥' };
   let detailHtml = '';
   [...byDate.keys()].sort().forEach(date => {
-    const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
     detailHtml += `<div class="day-heading">${escapeHtml(dayLabel)}</div>`;
     byDate.get(date).forEach(e => {
       const mins = durationMins(e);
-      const labels = deriveLabel(e);
-      const labelStr = labels.length ? labels.join(', ') : 'Session';
+      const activities = activityDetails(e);
+      const activityHtml = activities.length
+        ? activities.map(a => `<div class="entry-activity">${escapeHtml(a.name)}${a.detail ? `<span class="entry-activity-detail"> — ${escapeHtml(a.detail)}</span>` : ''}</div>`).join('')
+        : `<div class="entry-activity">Session</div>`;
       // Notes are surfaced together here regardless of which technique/repertoire
       // section they were typed under, so they're easy to skim in one place.
       const notesList = collectNotes(e);
       detailHtml += `<div class="entry-row">
         <div class="stat-block"><span class="stat-num">${mins}</span><span class="stat-unit">min</span></div>
         <div class="entry-info">
-          <span class="entry-activity">${escapeHtml(labelStr)}</span>
+          ${activityHtml}
           <span class="entry-meta">${escapeHtml(formatTimeRange(e))}, ${energyLabelMap[e.energy] || escapeHtml(e.energy || '')}</span>
           ${e.win ? `<div class="entry-win">${escapeHtml(e.win)}</div>` : ''}
           ${notesList.length ? `<div class="entry-notes">${notesList.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('')}</div>` : ''}
@@ -1060,6 +1102,7 @@ async function buildRangeReport() {
     .stat-num{font-size:22px;color:#8B3A1A;display:block;line-height:1;}
     .stat-unit{font-size:9px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;}
     .entry-activity{font-weight:bold;}
+    .entry-activity-detail{font-weight:normal;}
     .entry-meta{color:#7A5535;font-size:12px;display:block;}
     .entry-win{font-size:12px;font-style:italic;color:#7A5535;margin-top:4px;}
     .entry-notes{font-size:12px;color:#2C1810;margin-top:4px;}
