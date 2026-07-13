@@ -82,6 +82,14 @@ tr.day-header:hover td { background: var(--surface); }
 .pp-bpm { font-size: 12px; color: var(--accent); margin-top: 2px; }
 .pp-meta { font-size: 9.5px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
 
+.wt-section { margin: 0 0 16px; }
+.wt-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; background: var(--card); border: 0.5px solid var(--border); border-radius: 9px; padding: 10px 12px 6px; }
+.wt-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; cursor: default; }
+.wt-bar { width: 100%; max-width: 22px; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.wt-bar.wt-bar-zero { background: var(--divider); }
+.wt-bar-wrap.wt-current .wt-bar { background: var(--warn); }
+.wt-label { font-size: 8.5px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+
 .col-check { width: 34px; text-align: center; }
 .col-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 .cell-in { background: transparent; border: none; border-bottom: 0.5px solid transparent; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; padding: 3px 2px; width: 100%; border-radius: 3px; }
@@ -157,6 +165,11 @@ select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--bord
     <span class="filter-sep">to</span>
     <input type="date" class="filter-date" id="filterTo" title="To date">
     <button class="ghost-btn" id="filterClearBtn">Clear filters</button>
+  </div>
+
+  <div class="wt-section" id="wtSection" style="display:none;">
+    <div class="pp-title">Weekly trend<span class="pp-sub">Total practice time per week, most recent 12 weeks</span></div>
+    <div class="wt-chart" id="wtChart"></div>
   </div>
 
   <div class="pp-section" id="ppSection" style="display:none;">
@@ -288,6 +301,12 @@ function formatDayHeader(dateStr){
   const dt = new Date(y, m-1, d);
   return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
+// Local calendar date — Date.toISOString() is UTC-based and can land on the
+// wrong day near midnight, same reasoning as index.html's localDateStr.
+function localDateStr(d){
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
 
 const ENERGY = { low: 'low ○', good: 'good ◐', fire: 'fire ●' };
 
@@ -328,6 +347,33 @@ function renderPieceProgress(pieces){
       <div class="pp-name">${escapeHtml(p.name)}</div>
       <div class="pp-bpm">${trend}</div>
       <div class="pp-meta">${p.sessionCount} session${p.sessionCount===1?'':'s'}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadWeeklyTrend(){
+  try {
+    const today = localDateStr(new Date());
+    const res = await apiFetch(`/api/weekly-trend?weeks=12&today=${today}`);
+    const data = await res.json();
+    renderWeeklyTrend(data.weeks || []);
+  } catch (err) { /* non-critical — leave section hidden */ }
+}
+function renderWeeklyTrend(weeks){
+  const section = document.getElementById('wtSection');
+  const el = document.getElementById('wtChart');
+  const totalMinutes = weeks.reduce((s,w) => s + (w.minutes||0), 0);
+  if (!weeks.length || totalMinutes === 0) { section.style.display = 'none'; el.innerHTML = ''; return; }
+  section.style.display = '';
+  const max = Math.max(1, ...weeks.map(w => w.minutes));
+  el.innerHTML = weeks.map((w, i) => {
+    const pct = Math.max(2, Math.round((w.minutes / max) * 100));
+    const [y,m,d] = w.weekStart.split('-').map(Number);
+    const label = new Date(y, m-1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const isCurrent = i === weeks.length - 1;
+    return `<div class="wt-bar-wrap${isCurrent ? ' wt-current' : ''}" title="Week of ${label}: ${fmtMins(w.minutes)}">
+      <div class="wt-bar${w.minutes===0?' wt-bar-zero':''}" style="height:${pct}%;"></div>
+      <div class="wt-label">${label}</div>
     </div>`;
   }).join('');
 }
@@ -533,7 +579,7 @@ function toast(msg, isError){
   toastT = setTimeout(()=>el.classList.remove('show'), 2600);
 }
 
-function initApp(){ fetchAll(); loadPieceProgress(); }
+function initApp(){ fetchAll(); loadPieceProgress(); loadWeeklyTrend(); }
 </script>
 </body>
 </html>
