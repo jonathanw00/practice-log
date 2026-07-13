@@ -103,8 +103,11 @@ input.cell-dur { width: 56px; font-family: "Courier New", monospace; color: var(
 .cell-win::placeholder { color: var(--placeholder); font-style: italic; }
 select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 20px; color: var(--ink); font-size: 11px; padding: 4px 8px; font-family: inherit; cursor: pointer; outline: none; }
 
-.activity { display: flex; align-items: center; gap: 8px; min-width: 170px; flex-wrap: wrap; }
-.activity-label { color: var(--ink); }
+.activity { min-width: 170px; max-width: 320px; }
+.activity-line { display: flex; flex-wrap: wrap; column-gap: 4px; }
+.activity-line + .activity-line { margin-top: 3px; }
+.activity-label { color: var(--ink); font-weight: 600; }
+.activity-detail { color: var(--muted); }
 .activity-empty { color: var(--placeholder); font-style: italic; }
 .flag-pill { font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--warn); border: 1px solid var(--warn); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
 
@@ -267,6 +270,45 @@ function deriveLabel(e){
   return out;
 }
 function isJunk(e){ return deriveLabel(e).length === 0 && !nonEmpty(e.win); }
+
+// Mirrors index.html's activityDetails — same inclusion rules as deriveLabel,
+// plus what was specifically practiced (piece names, keys, chord key) so the
+// Activity column matches the detail shown in the PDF report export.
+function activityDetails(e) {
+  const out = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    if (!v) continue;
+    const hasKeys = Array.isArray(v.keys) && v.keys.length > 0;
+    if (!(hasKeys || hasPieces(v) || nonEmpty(v.scaleType) || nonEmpty(v.keyname) || nonEmpty(v.bpmstart) || nonEmpty(v.bpmend) || nonEmpty(v.notes))) continue;
+    let detail = '';
+    if (hasKeys) {
+      detail = v.keys.join(', ') + (nonEmpty(v.scaleType) ? ` (${v.scaleType})` : '');
+    } else if (hasPieces(v)) {
+      detail = v.pieces.filter(p => nonEmpty(p && p.name)).map(p => {
+        const bpm = (nonEmpty(p.bpmstart) || nonEmpty(p.bpmend)) ? ` (${p.bpmstart || '?'}→${p.bpmend || '?'} bpm)` : '';
+        return `${p.name}${bpm}`;
+      }).join(', ');
+    } else if (nonEmpty(v.keyname)) {
+      detail = v.keyname;
+    }
+    out.push({ name, detail });
+  }
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (!v) continue;
+    if (!(hasPieces(v) || nonEmpty(v.measures) || nonEmpty(v.notes))) continue;
+    let detail = '';
+    if (hasPieces(v)) {
+      detail = v.pieces.filter(p => nonEmpty(p && p.name)).map(p => {
+        const meas = nonEmpty(p.measures) ? ` (${p.measures})` : '';
+        return `${p.name}${meas}`;
+      }).join(', ');
+    } else if (nonEmpty(v.measures)) {
+      detail = v.measures;
+    }
+    out.push({ name, detail });
+  }
+  return out;
+}
 
 // Search matches win note, activity notes, and piece names — anything a
 // person might actually remember and type in to find a session again.
@@ -434,14 +476,14 @@ function render(){
       tbody.appendChild(dh);
     }
     const junk = isJunk(e);
-    const labels = deriveLabel(e);
+    const activities = activityDetails(e);
     const tr = document.createElement('tr');
     if (junk) tr.classList.add('flagged');
     if (selected.has(e.id)) tr.classList.add('selected');
     if (savingIds.has(e.id)) tr.classList.add('saving');
 
-    const activityHtml = labels.length
-      ? `<span class="activity-label">${escapeHtml(labels.join(', '))}</span>`
+    const activityHtml = activities.length
+      ? activities.map(a => `<div class="activity-line"><span class="activity-label">${escapeHtml(a.name)}</span>${a.detail ? `<span class="activity-detail"> — ${escapeHtml(a.detail)}</span>` : ''}</div>`).join('')
       : `<span class="activity-empty">— no activity —</span>` + (junk ? ` <span class="flag-pill">empty</span>` : '');
 
     tr.innerHTML = `
