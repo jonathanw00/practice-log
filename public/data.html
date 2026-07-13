@@ -95,11 +95,10 @@ tr.day-header:hover td { background: var(--surface); }
 .cell-in { background: transparent; border: none; border-bottom: 0.5px solid transparent; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; padding: 3px 2px; width: 100%; border-radius: 3px; }
 .cell-in:hover { border-bottom-color: var(--divider); }
 .cell-in:focus { border-bottom-color: var(--accent); background: var(--input-bg); }
-input.cell-date { width: 130px; font-family: "Courier New", monospace; }
 input.cell-time { width: 62px; font-family: "Courier New", monospace; }
 input.cell-dur { width: 56px; font-family: "Courier New", monospace; color: var(--accent); }
 .dur-unit { font-size: 10px; color: var(--muted); margin-left: 2px; }
-.cell-win { font-family: Georgia, serif; font-style: italic; min-width: 150px; }
+textarea.cell-win { font-family: Georgia, serif; font-style: italic; min-width: 150px; resize: vertical; white-space: pre-wrap; overflow-wrap: break-word; }
 .cell-win::placeholder { color: var(--placeholder); font-style: italic; }
 select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 20px; color: var(--ink); font-size: 11px; padding: 4px 8px; font-family: inherit; cursor: pointer; outline: none; }
 
@@ -114,7 +113,12 @@ select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--bord
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .icon-btn { background: transparent; border: 0.5px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 9px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap; text-decoration: none; display: inline-block; }
 .icon-btn:hover { border-color: var(--accent); color: var(--ink); }
-.icon-btn.del:hover { border-color: var(--danger); color: var(--danger); }
+
+tr.notes-row td { padding: 0 10px 10px 44px; border-bottom: 0.5px solid var(--divider); font-size: 12px; color: var(--ink); }
+tr.notes-row:hover { background: transparent; }
+.note-block { margin-top: 3px; }
+.note-block:first-child { margin-top: 0; }
+.note-block b { color: var(--muted); font-weight: normal; font-style: italic; }
 
 .empty-state, .loading-state { padding: 40px; text-align: center; color: var(--muted); font-style: italic; font-size: 13px; }
 
@@ -185,7 +189,7 @@ select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--bord
       <thead>
         <tr>
           <th class="col-check"><input type="checkbox" id="selAll" title="Select all"></th>
-          <th>Date</th><th>Start</th><th>End</th><th>Duration</th>
+          <th>End</th><th>Duration</th>
           <th>Activity</th><th>Energy</th><th>Win / note</th><th></th>
         </tr>
       </thead>
@@ -271,6 +275,20 @@ function deriveLabel(e){
 }
 function isJunk(e){ return deriveLabel(e).length === 0 && !nonEmpty(e.win); }
 
+// Full notes text per activity, tagged with which activity it's from — shown
+// read-only under each row (editing still happens in the full editor, same
+// as keys/pieces via "Edit details").
+function collectActivityNotes(e){
+  const out = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    if (v && nonEmpty(v.notes)) out.push({ label: name, notes: v.notes });
+  }
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (v && nonEmpty(v.notes)) out.push({ label: name, notes: v.notes });
+  }
+  return out;
+}
+
 // Mirrors index.html's activityDetails — same inclusion rules as deriveLabel,
 // plus what was specifically practiced (piece names, keys, chord key) so the
 // Activity column matches the detail shown in the PDF report export.
@@ -341,7 +359,7 @@ function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; retur
 function formatDayHeader(dateStr){
   const [y,m,d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m-1, d);
-  return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 // Local calendar date — Date.toISOString() is UTC-based and can land on the
 // wrong day near midnight, same reasoning as index.html's localDateStr.
@@ -466,8 +484,6 @@ function render(){
       dh.innerHTML = `
         <td class="col-check"></td>
         <td class="day-header-date">${escapeHtml(formatDayHeader(lastDate))}</td>
-        <td></td>
-        <td></td>
         <td class="day-header-duration">
           <div class="day-total-label">Duration</div>
           <div class="day-total-value">${fmtMins(day.mins)}</div>
@@ -488,20 +504,25 @@ function render(){
 
     tr.innerHTML = `
       <td class="col-check"><input type="checkbox" data-id="${e.id}" ${selected.has(e.id)?'checked':''}></td>
-      <td><input class="cell-in cell-date" type="date" value="${e.session_date||''}" data-id="${e.id}" data-f="session_date"></td>
-      <td><input class="cell-in cell-time" type="time" value="${e.start_time||''}" data-id="${e.id}" data-f="start_time"></td>
       <td><input class="cell-in cell-time" type="time" value="${e.end_time||''}" data-id="${e.id}" data-f="end_time"></td>
       <td><input class="cell-in cell-dur" type="number" min="0" step="5" value="${durationMins(e)}" data-id="${e.id}" data-f="duration"><span class="dur-unit">min</span></td>
       <td><div class="activity">${activityHtml}</div></td>
       <td><select class="cell-energy" data-id="${e.id}" data-f="energy">
         ${Object.keys(ENERGY).map(k=>`<option value="${k}" ${e.energy===k?'selected':''}>${ENERGY[k]}</option>`).join('')}
       </select></td>
-      <td><input class="cell-in cell-win" type="text" value="${escapeHtml(e.win||'')}" placeholder="—" data-id="${e.id}" data-f="win"></td>
+      <td><textarea class="cell-in cell-win" rows="1" placeholder="—" data-id="${e.id}" data-f="win">${escapeHtml(e.win||'')}</textarea></td>
       <td><div class="row-actions">
         <a class="icon-btn" href="./index.html?edit=${e.id}">Edit details ▸</a>
-        <button class="icon-btn del" data-del="${e.id}">Delete</button>
       </div></td>`;
     tbody.appendChild(tr);
+
+    const notes = collectActivityNotes(e);
+    if (notes.length) {
+      const nr = document.createElement('tr');
+      nr.className = 'notes-row';
+      nr.innerHTML = `<td colspan="7">${notes.map(n => `<div class="note-block"><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('')}</td>`;
+      tbody.appendChild(nr);
+    }
   });
   const emptyEl = document.getElementById('emptyState');
   if (entries.length === 0) {
@@ -551,14 +572,6 @@ document.getElementById('tbody').addEventListener('change', ev => {
     e[t.dataset.f] = t.value;
   }
   saveEntry(e);
-});
-
-// row buttons
-document.getElementById('tbody').addEventListener('click', ev => {
-  const delId = ev.target.dataset.del;
-  if (!delId) return;
-  const id = +delId;
-  if (confirm('Delete this entry? This can\u2019t be undone.')) deleteEntries([id]);
 });
 
 async function deleteEntries(ids){
