@@ -43,6 +43,12 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .stat-value.warn { color: var(--warn); }
 .stat-label { font-size: 9.5px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
 .tool-btns { display: flex; gap: 8px; align-items: center; }
+.filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }
+.search-input { flex: 1; min-width: 200px; background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--ink); outline: none; font-family: inherit; }
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--placeholder); }
+.filter-date { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: 12px; color: var(--ink); font-family: inherit; }
+.filter-sep { font-size: 12px; color: var(--muted); }
 .btn-flag { border-color: var(--warn); color: var(--warn); }
 .btn-flag:hover { background: var(--flag-bg); }
 .btn-danger { background: var(--danger); border: none; color: #fff; }
@@ -145,6 +151,14 @@ select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--bord
     </div>
   </div>
 
+  <div class="filter-bar" id="filterBar">
+    <input type="search" class="search-input" id="searchInput" placeholder="Search notes, pieces, activities, win...">
+    <input type="date" class="filter-date" id="filterFrom" title="From date">
+    <span class="filter-sep">to</span>
+    <input type="date" class="filter-date" id="filterTo" title="To date">
+    <button class="ghost-btn" id="filterClearBtn">Clear filters</button>
+  </div>
+
   <div class="pp-section" id="ppSection" style="display:none;">
     <div class="pp-title">Piece progress<span class="pp-sub">BPM range across logged sessions, most recently practiced first</span></div>
     <div class="piece-progress" id="pieceProgress"></div>
@@ -219,6 +233,9 @@ document.getElementById('authInput').addEventListener('keydown', e => { if (e.ke
 let entries = [];        // parsed rows: technique_json/repertoire_json as OBJECTS (not raw strings)
 const selected = new Set();
 const savingIds = new Set();
+let searchQuery = '';
+let filterFrom = '';
+let filterTo = '';
 
 function nonEmpty(v){ return v !== undefined && v !== null && String(v).trim() !== ''; }
 
@@ -237,6 +254,26 @@ function deriveLabel(e){
   return out;
 }
 function isJunk(e){ return deriveLabel(e).length === 0 && !nonEmpty(e.win); }
+
+// Search matches win note, activity notes, and piece names — anything a
+// person might actually remember and type in to find a session again.
+function entrySearchText(e){
+  const parts = [e.win || '', ...deriveLabel(e)];
+  for (const v of [...Object.values(e.technique_json || {}), ...Object.values(e.repertoire_json || {})]) {
+    if (!v) continue;
+    if (nonEmpty(v.notes)) parts.push(v.notes);
+    if (nonEmpty(v.keyname)) parts.push(v.keyname);
+    if (Array.isArray(v.pieces)) v.pieces.forEach(p => nonEmpty(p && p.name) && parts.push(p.name));
+  }
+  return parts.join(' \n ').toLowerCase();
+}
+function matchesFilters(e){
+  if (filterFrom && e.session_date < filterFrom) return false;
+  if (filterTo && e.session_date > filterTo) return false;
+  if (searchQuery && !entrySearchText(e).includes(searchQuery)) return false;
+  return true;
+}
+function visibleEntries(){ return entries.filter(matchesFilters); }
 
 function toMins(hhmm){ const [h,m] = hhmm.split(':').map(Number); return h*60+m; }
 function toHHMM(mins){ mins = ((mins % 1440) + 1440) % 1440; const h = Math.floor(mins/60), m = mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
@@ -318,7 +355,8 @@ async function saveEntry(e){
 
 function render(){
   const tbody = document.getElementById('tbody');
-  const sorted = [...entries].sort((a,b) => {
+  const filtered = visibleEntries();
+  const sorted = [...filtered].sort((a,b) => {
     if (a.session_date !== b.session_date) return b.session_date.localeCompare(a.session_date);
     return (b.start_time||'').localeCompare(a.start_time||'');
   });
@@ -377,22 +415,31 @@ function render(){
       </div></td>`;
     tbody.appendChild(tr);
   });
-  document.getElementById('emptyState').style.display = (entries.length===0) ? 'block' : 'none';
-  updateStats();
+  const emptyEl = document.getElementById('emptyState');
+  if (entries.length === 0) {
+    emptyEl.textContent = 'No entries yet.';
+    emptyEl.style.display = 'block';
+  } else if (filtered.length === 0) {
+    emptyEl.textContent = 'No entries match your filters.';
+    emptyEl.style.display = 'block';
+  } else {
+    emptyEl.style.display = 'none';
+  }
+  updateStats(filtered);
 }
 function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-function updateStats(){
-  const total = entries.reduce((s,e)=>s+durationMins(e),0);
-  const flagged = entries.filter(isJunk).length;
-  document.getElementById('statCount').textContent = entries.length;
+function updateStats(filtered){
+  const total = filtered.reduce((s,e)=>s+durationMins(e),0);
+  const flagged = filtered.filter(isJunk).length;
+  document.getElementById('statCount').textContent = filtered.length;
   document.getElementById('statTime').textContent = fmtMins(total);
   document.getElementById('statFlag').textContent = flagged;
   const n = selected.size;
   const del = document.getElementById('delBtn');
   del.textContent = `Delete selected (${n})`;
   del.disabled = n === 0;
-  document.getElementById('selAll').checked = entries.length>0 && selected.size===entries.length;
+  document.getElementById('selAll').checked = filtered.length>0 && filtered.every(e => selected.has(e.id));
 }
 
 // inline edit
@@ -439,18 +486,32 @@ async function deleteEntries(ids){
 }
 
 document.getElementById('selAll').addEventListener('change', ev => {
-  selected.clear();
-  if (ev.target.checked) entries.forEach(e => selected.add(e.id));
+  const filtered = visibleEntries();
+  filtered.forEach(e => ev.target.checked ? selected.add(e.id) : selected.delete(e.id));
   render();
 });
 document.getElementById('flagBtn').addEventListener('click', () => {
-  const flagged = entries.filter(isJunk);
+  const flagged = visibleEntries().filter(isJunk);
   if (!flagged.length) { toast('No empty-looking entries found'); return; }
   flagged.forEach(e => selected.add(e.id));
   render();
   toast(`Selected ${flagged.length} empty-looking ${flagged.length===1?'entry':'entries'} — review, then Delete selected`);
 });
 document.getElementById('clearBtn').addEventListener('click', () => { selected.clear(); render(); });
+
+document.getElementById('searchInput').addEventListener('input', ev => {
+  searchQuery = ev.target.value.trim().toLowerCase();
+  render();
+});
+document.getElementById('filterFrom').addEventListener('change', ev => { filterFrom = ev.target.value; render(); });
+document.getElementById('filterTo').addEventListener('change', ev => { filterTo = ev.target.value; render(); });
+document.getElementById('filterClearBtn').addEventListener('click', () => {
+  searchQuery = ''; filterFrom = ''; filterTo = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('filterFrom').value = '';
+  document.getElementById('filterTo').value = '';
+  render();
+});
 document.getElementById('delBtn').addEventListener('click', () => {
   const ids = [...selected];
   if (!ids.length) return;
