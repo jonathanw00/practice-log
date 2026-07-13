@@ -60,6 +60,12 @@ tbody tr.flagged:hover { background: var(--flag-bg); }
 tbody tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 tbody tr.selected { background: rgba(139,58,26,0.10); }
 tbody tr.saving td { opacity: .5; }
+tr.day-header td { background: var(--surface); padding: 8px 10px 4px; border-bottom: 0.5px solid var(--border); vertical-align: bottom; }
+tr.day-header:hover td { background: var(--surface); }
+.day-header-date { font-family: Georgia, serif; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.day-total-label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.day-total-value { font-family: Georgia, serif; font-size: 17px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.day-header-count { font-size: 11px; color: var(--muted); font-style: italic; white-space: nowrap; }
 
 .col-check { width: 34px; text-align: center; }
 .col-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
@@ -226,6 +232,11 @@ function durationMins(e){
   return Math.max(0, toMins(e.end_time) - toMins(e.start_time));
 }
 function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; return h? `${h}h ${r}m` : `${r}m`; }
+function formatDayHeader(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
 
 const ENERGY = { low: 'low ○', good: 'good ◐', fire: 'fire ●' };
 
@@ -275,8 +286,33 @@ function render(){
     if (a.session_date !== b.session_date) return b.session_date.localeCompare(a.session_date);
     return (b.start_time||'').localeCompare(a.start_time||'');
   });
-  tbody.innerHTML = '';
+  const dayTotals = new Map(); // session_date -> { mins, count }
   sorted.forEach(e => {
+    const d = dayTotals.get(e.session_date) || { mins: 0, count: 0 };
+    d.mins += durationMins(e);
+    d.count += 1;
+    dayTotals.set(e.session_date, d);
+  });
+  tbody.innerHTML = '';
+  let lastDate = null;
+  sorted.forEach(e => {
+    if (e.session_date !== lastDate) {
+      lastDate = e.session_date;
+      const day = dayTotals.get(lastDate);
+      const dh = document.createElement('tr');
+      dh.className = 'day-header';
+      dh.innerHTML = `
+        <td class="col-check"></td>
+        <td class="day-header-date">${escapeHtml(formatDayHeader(lastDate))}</td>
+        <td></td>
+        <td></td>
+        <td class="day-header-duration">
+          <div class="day-total-label">Duration</div>
+          <div class="day-total-value">${fmtMins(day.mins)}</div>
+        </td>
+        <td class="day-header-count" colspan="4">${day.count>1?`${day.count} sessions`:''}</td>`;
+      tbody.appendChild(dh);
+    }
     const junk = isJunk(e);
     const labels = deriveLabel(e);
     const tr = document.createElement('tr');
