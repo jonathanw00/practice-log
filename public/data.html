@@ -95,12 +95,12 @@ tr.day-header:hover td { background: var(--surface); }
 .cell-in { background: transparent; border: none; border-bottom: 0.5px solid transparent; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; padding: 3px 2px; width: 100%; border-radius: 3px; }
 .cell-in:hover { border-bottom-color: var(--divider); }
 .cell-in:focus { border-bottom-color: var(--accent); background: var(--input-bg); }
-input.cell-time { width: 62px; font-family: "Courier New", monospace; }
+.cell-end { font-family: "Courier New", monospace; font-size: 13px; color: var(--ink); white-space: nowrap; }
 input.cell-dur { width: 56px; font-family: "Courier New", monospace; color: var(--accent); }
 .dur-unit { font-size: 10px; color: var(--muted); margin-left: 2px; }
-textarea.cell-win { font-family: Georgia, serif; font-style: italic; min-width: 150px; resize: vertical; white-space: pre-wrap; overflow-wrap: break-word; }
+textarea.cell-win { font-family: Georgia, serif; font-style: italic; min-width: 150px; resize: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; }
 .cell-win::placeholder { color: var(--placeholder); font-style: italic; }
-select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 20px; color: var(--ink); font-size: 11px; padding: 4px 8px; font-family: inherit; cursor: pointer; outline: none; }
+.cell-energy-ro { font-size: 12px; color: var(--ink); white-space: nowrap; }
 
 .activity { min-width: 170px; max-width: 320px; }
 .activity-line { display: flex; flex-wrap: wrap; column-gap: 4px; }
@@ -356,6 +356,12 @@ function durationMins(e){
   return Math.max(0, toMins(e.end_time) - toMins(e.start_time));
 }
 function fmtMins(m){ if(!m) return '0m'; const h=Math.floor(m/60), r=m%60; return h? `${h}h ${r}m` : `${r}m`; }
+function formatTime12(hhmm){
+  if (!nonEmpty(hhmm)) return '—';
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
 function formatDayHeader(dateStr){
   const [y,m,d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m-1, d);
@@ -504,12 +510,10 @@ function render(){
 
     tr.innerHTML = `
       <td class="col-check"><input type="checkbox" data-id="${e.id}" ${selected.has(e.id)?'checked':''}></td>
-      <td><input class="cell-in cell-time" type="time" value="${e.end_time||''}" data-id="${e.id}" data-f="end_time"></td>
+      <td><span class="cell-end">${escapeHtml(formatTime12(e.end_time))}</span></td>
       <td><input class="cell-in cell-dur" type="number" min="0" step="5" value="${durationMins(e)}" data-id="${e.id}" data-f="duration"><span class="dur-unit">min</span></td>
       <td><div class="activity">${activityHtml}</div></td>
-      <td><select class="cell-energy" data-id="${e.id}" data-f="energy">
-        ${Object.keys(ENERGY).map(k=>`<option value="${k}" ${e.energy===k?'selected':''}>${ENERGY[k]}</option>`).join('')}
-      </select></td>
+      <td><span class="cell-energy-ro">${escapeHtml(ENERGY[e.energy] || e.energy || '')}</span></td>
       <td><textarea class="cell-in cell-win" rows="1" placeholder="—" data-id="${e.id}" data-f="win">${escapeHtml(e.win||'')}</textarea></td>
       <td><div class="row-actions">
         <a class="icon-btn" href="./index.html?edit=${e.id}">Edit details ▸</a>
@@ -535,8 +539,13 @@ function render(){
     emptyEl.style.display = 'none';
   }
   updateStats(filtered);
+  tbody.querySelectorAll('.cell-win').forEach(autosizeTextarea);
 }
 function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function autosizeTextarea(el){
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 
 function updateStats(filtered){
   const total = filtered.reduce((s,e)=>s+durationMins(e),0);
@@ -572,6 +581,9 @@ document.getElementById('tbody').addEventListener('change', ev => {
     e[t.dataset.f] = t.value;
   }
   saveEntry(e);
+});
+document.getElementById('tbody').addEventListener('input', ev => {
+  if (ev.target.classList.contains('cell-win')) autosizeTextarea(ev.target);
 });
 
 async function deleteEntries(ids){
