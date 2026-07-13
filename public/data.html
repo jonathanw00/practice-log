@@ -67,6 +67,15 @@ tr.day-header:hover td { background: var(--surface); }
 .day-total-value { font-family: Georgia, serif; font-size: 17px; color: var(--accent); font-weight: 600; white-space: nowrap; }
 .day-header-count { font-size: 11px; color: var(--muted); font-style: italic; white-space: nowrap; }
 
+.pp-section { margin: 0 0 16px; }
+.pp-title { font-family: Georgia, serif; font-size: 14px; color: var(--ink); margin-bottom: 8px; }
+.pp-sub { font-size: 11px; color: var(--muted); font-style: italic; margin-left: 8px; }
+.piece-progress { display: flex; gap: 10px; flex-wrap: wrap; }
+.pp-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 9px; padding: 8px 13px; }
+.pp-name { font-family: Georgia, serif; font-size: 13px; color: var(--ink); }
+.pp-bpm { font-size: 12px; color: var(--accent); margin-top: 2px; }
+.pp-meta { font-size: 9.5px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+
 .col-check { width: 34px; text-align: center; }
 .col-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 .cell-in { background: transparent; border: none; border-bottom: 0.5px solid transparent; color: var(--ink); font-family: inherit; font-size: 13px; outline: none; padding: 3px 2px; width: 100%; border-radius: 3px; }
@@ -134,6 +143,11 @@ select.cell-energy { background: var(--input-bg); border: 0.5px solid var(--bord
       <button class="ghost-btn" id="clearBtn">Clear selection</button>
       <button class="ghost-btn btn-danger" id="delBtn" disabled>Delete selected (0)</button>
     </div>
+  </div>
+
+  <div class="pp-section" id="ppSection" style="display:none;">
+    <div class="pp-title">Piece progress<span class="pp-sub">BPM range across logged sessions, most recently practiced first</span></div>
+    <div class="piece-progress" id="pieceProgress"></div>
   </div>
 
   <div class="table-card">
@@ -258,6 +272,28 @@ async function fetchAll(){
   render();
 }
 function safeParse(s){ try { return JSON.parse(s || '{}'); } catch(e){ return {}; } }
+
+async function loadPieceProgress(){
+  try {
+    const res = await apiFetch('/api/piece-progress');
+    const data = await res.json();
+    renderPieceProgress(data.pieces || []);
+  } catch (err) { /* non-critical — leave section hidden */ }
+}
+function renderPieceProgress(pieces){
+  const section = document.getElementById('ppSection');
+  const el = document.getElementById('pieceProgress');
+  if (!pieces.length) { section.style.display = 'none'; el.innerHTML = ''; return; }
+  section.style.display = '';
+  el.innerHTML = pieces.map(p => {
+    const trend = p.earliestBpm === p.latestBpm ? `${p.latestBpm} bpm` : `${p.earliestBpm} &rarr; ${p.latestBpm} bpm`;
+    return `<div class="pp-card">
+      <div class="pp-name">${escapeHtml(p.name)}</div>
+      <div class="pp-bpm">${trend}</div>
+      <div class="pp-meta">${p.sessionCount} session${p.sessionCount===1?'':'s'}</div>
+    </div>`;
+  }).join('');
+}
 
 function getEntry(id){ return entries.find(e => e.id === id); }
 
@@ -436,7 +472,7 @@ function toast(msg, isError){
   toastT = setTimeout(()=>el.classList.remove('show'), 2600);
 }
 
-function initApp(){ fetchAll(); }
+function initApp(){ fetchAll(); loadPieceProgress(); }
 </script>
 </body>
 </html>
