@@ -58,7 +58,6 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .meta-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; }
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
 .meta-duration { font-size: 15px; color: var(--accent); font-family: "Courier New", monospace; min-height: 22px; }
-.session-energy-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
 .stats-bar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .stat-pill { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 8px 14px; display: flex; flex-direction: column; align-items: flex-start; min-width: 78px; flex: 1; }
 .stat-value { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -80,12 +79,18 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .auth-input { width: 100%; background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 15px; color: var(--ink); outline: none; font-family: inherit; }
 .auth-input:focus { border-color: var(--accent); }
 .auth-error { font-size: 12px; color: #c0392b; margin-top: 10px; min-height: 16px; }
-.energy-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
-.energy-pips { display: flex; gap: 6px; margin-top: 6px; }
+.energy-pips { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
 .epip.active { background: var(--plum); color: #fff; border-color: var(--plum); }
-.rec-check { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 13px; color: var(--ink); cursor: pointer; user-select: none; }
+.rec-check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink); cursor: pointer; user-select: none; }
 .rec-check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 14px; padding: 20px 22px; max-width: 380px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.28); }
+.modal-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.modal-body { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+.modal-body b { color: var(--ink); font-weight: 700; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .section-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .section-title { font-size: 16px; color: var(--ink); font-weight: 700; }
 .section-sub { font-size: 11px; color: var(--muted); font-style: italic; }
@@ -202,6 +207,10 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <div class="stat-label">This week</div>
     </div>
     <div class="stat-pill">
+      <div class="stat-value" id="statPrevWeek">—</div>
+      <div class="stat-label">Last week</div>
+    </div>
+    <div class="stat-pill">
       <div class="stat-value" id="statAllTime">—</div>
       <div class="stat-label">All-time</div>
     </div>
@@ -237,26 +246,20 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     </div>
   </div>
 
-  <div class="session-energy-row">
-    <div class="energy-card">
-      <div class="meta-label">Mood</div>
-      <div class="energy-pips" id="energyPips">
-        <div class="epip active" data-val="focused">Focused</div>
-        <div class="epip" data-val="energized">Energized</div>
-        <div class="epip" data-val="calm">Calm</div>
-        <div class="epip" data-val="tired">Tired</div>
-        <div class="epip" data-val="frustrated">Frustrated</div>
-      </div>
-    </div>
-    <div class="energy-card">
-      <div class="meta-label">Recording</div>
-      <label class="rec-check"><input type="checkbox" id="recordingChk"> Recorded myself</label>
-    </div>
+  <div class="section-header">
+    <div class="section-title">Mood</div>
+    <label class="rec-check" style="margin-left: auto;"><input type="checkbox" id="recordingChk"> Recorded myself</label>
+  </div>
+  <div class="energy-pips" id="energyPips" style="margin-bottom: 18px;">
+    <div class="epip active" data-val="focused">Focused</div>
+    <div class="epip" data-val="energized">Energized</div>
+    <div class="epip" data-val="calm">Calm</div>
+    <div class="epip" data-val="tired">Tired</div>
+    <div class="epip" data-val="frustrated">Frustrated</div>
   </div>
 
   <div class="section-header">
-    <div class="section-title">Technique</div>
-    <div class="section-sub">20 minutes</div>
+    <div class="section-title">Warm Up</div>
   </div>
   <div class="tech-cards" id="techCards"></div>
 
@@ -264,7 +267,6 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 
   <div class="section-header">
     <div class="section-title">Repertoire</div>
-    <div class="section-sub">25 minutes</div>
   </div>
   <div id="repBlocks"></div>
 
@@ -280,6 +282,17 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 
 <button class="new-entry-btn" id="newEntryBtn">＋ New entry</button>
 
+<div class="modal-overlay" id="prevDayModal">
+  <div class="modal-card">
+    <div class="modal-title">Late-night session</div>
+    <div class="modal-body" id="prevDayMsg"></div>
+    <div class="modal-actions">
+      <button class="ghost-btn" id="prevDayNo" type="button">No, keep date</button>
+      <button class="save-btn" id="prevDayYes" type="button">Yes, previous day</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '/api/sessions';
 const API_STATS = '/api/stats';
@@ -290,7 +303,7 @@ const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
 const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
 const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios'];
 const PIECE_PICKER_TECHNIQUES = ['Technical piece'];
-const PIECE_PICKER_REP_KEYS = ['trad', 'lead']; // repItems keys that get a song picker instead of plain measures text
+const PIECE_PICKER_REP_KEYS = ['trad', 'lead', 'sight']; // repItems keys that get a song picker instead of plain measures text
 const PASSWORD_KEY = 'practice_log_password';
 
 function getStoredPassword() {
@@ -303,10 +316,11 @@ function apiFetch(url, options = {}) {
   const headers = Object.assign({}, options.headers, { 'X-App-Password': getStoredPassword() });
   return fetch(url, Object.assign({}, options, { headers }));
 }
-const pieceLists = { technical: [], repertoire: [] }; // category -> [{id, name, category}], fetched from API
+const pieceLists = { technical: [], repertoire: [], sightreading: [] }; // category -> [{id, name, category}], fetched from API
 const repItems = [
   { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
   { label: 'Lead sheet', key: 'lead', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
+  { label: 'Sight reading', key: 'sight', category: 'sightreading', notesPlaceholder: 'What did you sight-read? How did it go?' },
   { label: 'Listening assignments', key: 'listen', notesPlaceholder: 'Observations, things to apply to your playing...' }
 ];
 
@@ -500,7 +514,7 @@ repItems.forEach(r => {
   const block = document.createElement('div');
   block.className = 'rep-block';
   const pieceFieldHtml = PIECE_PICKER_REP_KEYS.includes(r.key) ? `
-    <div class="piece-picker" data-repkey="${r.key}" data-category="repertoire" data-fields="measures">
+    <div class="piece-picker" data-repkey="${r.key}" data-category="${r.category || 'repertoire'}" data-fields="measures">
       <div class="piece-chips" data-repkey="${r.key}"></div>
       <input class="t-input piece-add-input" type="text" placeholder="+ Add new piece (press Enter)" data-repkey="${r.key}">
       <div class="piece-detail-list" data-repkey="${r.key}"></div>
@@ -601,6 +615,7 @@ async function loadStats() {
     const streak = data.streakDays || 0;
     document.getElementById('statStreak').textContent = `${streak} day${streak === 1 ? '' : 's'}`;
     document.getElementById('statWeek').textContent = formatMinutes(data.weekMinutes);
+    document.getElementById('statPrevWeek').textContent = formatMinutes(data.prevWeekMinutes);
     document.getElementById('statAllTime').textContent = formatMinutes(data.allTimeMinutes);
     renderEntryChips('todayStrip', data.todayEntries || [], 'Nothing logged yet today');
   } catch (e) {
@@ -806,6 +821,34 @@ function setStatus(msg, cls) {
   el.className = 'save-status' + (cls ? ' ' + cls : '');
 }
 
+// Sessions that end at or after midnight but before this time are offered up
+// for backdating to the previous day. Zero-padded HH:MM compares lexically.
+const LATE_NIGHT_CUTOFF = '02:00';
+
+// Styled yes/no popup; resolves true if the user wants the previous day.
+function askPreviousDay(endTime, curDateStr, prevDateStr) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('prevDayModal');
+    document.getElementById('prevDayMsg').innerHTML =
+      `This session ends at <b>${formatTimeLabel(endTime)}</b> — after midnight. ` +
+      `Count it toward the previous day, <b>${formatDateLabel(prevDateStr)}</b>, ` +
+      `instead of <b>${formatDateLabel(curDateStr)}</b>?`;
+    const cleanup = (val) => {
+      overlay.classList.remove('open');
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
+      resolve(val);
+    };
+    const yesBtn = document.getElementById('prevDayYes');
+    const noBtn = document.getElementById('prevDayNo');
+    const onYes = () => cleanup(true);
+    const onNo = () => cleanup(false);
+    yesBtn.addEventListener('click', onYes);
+    noBtn.addEventListener('click', onNo);
+    overlay.classList.add('open');
+  });
+}
+
 async function doSave(isManual) {
   if (isManual) {
     const endEl = document.getElementById('endTime');
@@ -819,6 +862,14 @@ async function doSave(isManual) {
     }
   }
   const data = collectData();
+  // New late-night entries: offer to tally against the previous day.
+  if (!currentId && data.end_time && data.end_time < LATE_NIGHT_CUTOFF) {
+    const prevDate = localDateStr(addDays(toDateOnly(data.session_date), -1));
+    if (await askPreviousDay(data.end_time, data.session_date, prevDate)) {
+      data.session_date = prevDate;
+      document.getElementById('sessionDate').value = prevDate;
+    }
+  }
   try {
     if (currentId) {
       await apiFetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId, ...data }) });
@@ -1172,18 +1223,31 @@ function warmupCell(e, activity) {
 }
 
 // Composer / Pieces column: every named piece across Technical piece and the
-// repertoire pickers (Traditionally notated / Lead sheet). No BPM here — that
-// lives in its own Tempo column.
+// repertoire pickers (Traditionally notated / Lead sheet). Sight reading is
+// excluded — it has its own column. No BPM here — that lives in Tempo.
 function chartPieces(e) {
   const names = [];
   for (const [name, v] of Object.entries(e.technique_json || {})) {
     if (name === 'Scales' || name === 'Arpeggios') continue;
     if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
   }
-  for (const v of Object.values(e.repertoire_json || {})) {
+  for (const [name, v] of Object.entries(e.repertoire_json || {})) {
+    if (name === 'Sight reading') continue;
     if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
   }
   return names;
+}
+
+// Sight reading column: what was read (piece names + measures) plus any notes.
+function chartSightReading(e) {
+  const v = (e.repertoire_json || {})['Sight reading'];
+  if (!v) return '';
+  const parts = [];
+  if (hasPieces(v)) v.pieces.forEach(p => {
+    if (nonEmpty(p && p.name)) parts.push(escapeHtml(p.name + (nonEmpty(p.measures) ? ` (${p.measures})` : '')));
+  });
+  if (nonEmpty(v.notes)) parts.push(`<span class="sr-note">${escapeHtml(v.notes)}</span>`);
+  return parts.join('<br>');
 }
 
 // Tempo column: per-piece BPM (start→end) for any piece that logged one.
@@ -1218,7 +1282,8 @@ async function buildClassChart() {
     const arps = warmupCell(e, 'Arpeggios');
     const pieces = chartPieces(e);
     const tempo = chartTempo(e);
-    const notes = collectNotes(e);
+    const sight = chartSightReading(e);
+    const notes = collectNotes(e).filter(n => n.label !== 'Sight reading');
     const notesHtml = notes.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('');
     return `<tr>
       <td class="date">${escapeHtml(dateLabel)}</td>
@@ -1227,6 +1292,7 @@ async function buildClassChart() {
       <td>${escapeHtml(arps)}</td>
       <td class="piece">${pieces.map(escapeHtml).join('<br>')}</td>
       <td class="tempo">${tempo.map(escapeHtml).join('<br>')}</td>
+      <td class="sight">${sight}</td>
       <td class="notes">${notesHtml}</td>
       <td class="center">${e.recording ? '✓' : ''}</td>
       <td>${escapeHtml(moodMap[e.energy] || e.energy || '')}</td>
@@ -1248,15 +1314,16 @@ async function buildClassChart() {
     td.piece{font-weight:bold;}
     td.notes b{font-weight:normal;font-style:italic;color:#555;}
     td.notes div{margin-bottom:2px;}
+    td.sight .sr-note{font-style:italic;color:#555;}
     tbody tr:nth-child(even){background:#fafafa;}
   </style></head><body>
     <h1>Practice chart</h1>
     <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel} &middot; ${fmtMins(totalMins)} over ${daysPracticed} day${daysPracticed === 1 ? '' : 's'}</div>
     <table>
       <thead><tr>
-        <th>Date</th><th>Time</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Composer / Pieces</th><th>Tempo</th><th>Notes</th><th>Rec.</th><th>Mood</th>
+        <th>Date</th><th>Time</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Composer / Pieces</th><th>Tempo</th><th>Sight reading</th><th>Notes</th><th>Rec.</th><th>Mood</th>
       </tr></thead>
-      <tbody>${rowsHtml || '<tr><td colspan="9" style="text-align:center;font-style:italic;color:#777;padding:20px;">No entries in this range.</td></tr>'}</tbody>
+      <tbody>${rowsHtml || '<tr><td colspan="10" style="text-align:center;font-style:italic;color:#777;padding:20px;">No entries in this range.</td></tr>'}</tbody>
     </table>
   </body></html>`;
 
@@ -1278,6 +1345,7 @@ document.querySelectorAll('input, textarea').forEach(el => {
 function initApp() {
   loadPieces('technical');
   loadPieces('repertoire');
+  loadPieces('sightreading');
   fetchSessionCount(document.getElementById('sessionDate').value);
   loadStats();
   // Deep link from the data page's "Edit details" (data.html?edit=<id> -> index.html?edit=<id>)

@@ -20,9 +20,18 @@ export async function onRequest(context) {
       return json({ error: "date, weekStart, weekEnd query params required" }, cors, 400);
     }
 
-    const [todayRow, weekRow, allTimeRow, todayEntries, practiceDates] = await Promise.all([
+    // Previous week = the seven days immediately before weekStart, derived here
+    // so the client doesn't need to pass extra params. UTC math avoids DST drift.
+    const ws = new Date(weekStart + "T00:00:00Z");
+    const prevEndDate = new Date(ws); prevEndDate.setUTCDate(ws.getUTCDate() - 1);
+    const prevStartDate = new Date(ws); prevStartDate.setUTCDate(ws.getUTCDate() - 7);
+    const prevWeekStart = prevStartDate.toISOString().slice(0, 10);
+    const prevWeekEnd = prevEndDate.toISOString().slice(0, 10);
+
+    const [todayRow, weekRow, prevWeekRow, allTimeRow, todayEntries, practiceDates] = await Promise.all([
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date = ?`).bind(date).first(),
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date BETWEEN ? AND ?`).bind(weekStart, weekEnd).first(),
+      db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions WHERE session_date BETWEEN ? AND ?`).bind(prevWeekStart, prevWeekEnd).first(),
       db.prepare(`SELECT COALESCE(SUM(${MINUTES_EXPR}),0) as minutes FROM sessions`).first(),
       db.prepare(`SELECT id, start_time, technique_json, repertoire_json FROM sessions WHERE session_date = ? ORDER BY start_time ASC`).bind(date).all(),
       db.prepare(`SELECT DISTINCT session_date FROM sessions WHERE (${MINUTES_EXPR}) > 0 ORDER BY session_date DESC LIMIT 400`).all()
@@ -39,6 +48,7 @@ export async function onRequest(context) {
     return json({
       todayMinutes: todayRow?.minutes || 0,
       weekMinutes: weekRow?.minutes || 0,
+      prevWeekMinutes: prevWeekRow?.minutes || 0,
       allTimeMinutes: allTimeRow?.minutes || 0,
       streakDays,
       todayEntries: entries
