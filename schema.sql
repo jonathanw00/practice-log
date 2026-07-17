@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   end_time TEXT,
   session_num INTEGER DEFAULT 1,
   energy TEXT DEFAULT 'good',
+  recording INTEGER DEFAULT 0,
   win TEXT,
   technique_json TEXT,
   repertoire_json TEXT,

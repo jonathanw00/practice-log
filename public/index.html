@@ -84,6 +84,8 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .energy-pips { display: flex; gap: 6px; margin-top: 6px; }
 .epip { padding: 5px 12px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
 .epip.active { background: var(--plum); color: #fff; border-color: var(--plum); }
+.rec-check { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 13px; color: var(--ink); cursor: pointer; user-select: none; }
+.rec-check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 .section-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .section-title { font-size: 16px; color: var(--ink); font-weight: 700; }
 .section-sub { font-size: 11px; color: var(--muted); font-style: italic; }
@@ -181,7 +183,8 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <button class="ghost-btn" id="thisWeekBtn" type="button">This week</button>
       <div style="flex: 1;"></div>
       <button class="ghost-btn" id="cancelReportBtn" type="button">Cancel</button>
-      <button class="save-btn" id="generateReportBtn" type="button">Generate PDF</button>
+      <button class="ghost-btn" id="classChartBtn" type="button">Class chart</button>
+      <button class="save-btn" id="generateReportBtn" type="button">Narrative PDF</button>
     </div>
   </div>
 
@@ -236,12 +239,18 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 
   <div class="session-energy-row">
     <div class="energy-card">
-      <div class="meta-label">Energy</div>
+      <div class="meta-label">Mood</div>
       <div class="energy-pips" id="energyPips">
-        <div class="epip" data-val="low">Low</div>
-        <div class="epip active" data-val="good">Good</div>
-        <div class="epip" data-val="fire">🔥</div>
+        <div class="epip active" data-val="focused">Focused</div>
+        <div class="epip" data-val="energized">Energized</div>
+        <div class="epip" data-val="calm">Calm</div>
+        <div class="epip" data-val="tired">Tired</div>
+        <div class="epip" data-val="frustrated">Frustrated</div>
       </div>
+    </div>
+    <div class="energy-card">
+      <div class="meta-label">Recording</div>
+      <label class="rec-check"><input type="checkbox" id="recordingChk"> Recorded myself</label>
     </div>
   </div>
 
@@ -303,7 +312,7 @@ const repItems = [
 
 let currentId = null;
 let sessionNum = 1;
-let energyVal = 'good';
+let energyVal = 'focused';
 let isDark = false;
 
 function setCurrentId(id) {
@@ -784,6 +793,7 @@ function collectData() {
     end_time: document.getElementById('endTime').value,
     session_num: sessionNum,
     energy: energyVal,
+    recording: document.getElementById('recordingChk').checked ? 1 : 0,
     win: document.getElementById('winField').value,
     technique_json: technique,
     repertoire_json: repertoire
@@ -844,9 +854,10 @@ function newEntry() {
   document.querySelectorAll('.piece-detail-list').forEach(el => el.innerHTML = '');
   renderAllPickerChips();
   document.getElementById('winField').value = '';
+  document.getElementById('recordingChk').checked = false;
   document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
-  document.querySelector('#energyPips .epip[data-val="good"]').classList.add('active');
-  energyVal = 'good';
+  document.querySelector('#energyPips .epip[data-val="focused"]').classList.add('active');
+  energyVal = 'focused';
   resetSessionMeta();
   setSessionNum(sessionNum + 1);
   setStatus('Not saved yet');
@@ -922,10 +933,11 @@ async function loadEntry(id) {
     });
 
     document.getElementById('winField').value = row.win || '';
+    document.getElementById('recordingChk').checked = !!row.recording;
     document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
-    const epEl = document.querySelector(`#energyPips .epip[data-val="${row.energy || 'good'}"]`);
+    const epEl = document.querySelector(`#energyPips .epip[data-val="${row.energy || 'focused'}"]`);
     if (epEl) epEl.classList.add('active');
-    energyVal = row.energy || 'good';
+    energyVal = row.energy || 'focused';
 
     setSessionNum(row.session_num || 1);
     setCurrentId(row.id);
@@ -1016,12 +1028,16 @@ document.getElementById('cancelReportBtn').addEventListener('click', () => { doc
 document.getElementById('lastWeekBtn').addEventListener('click', setLastWeekRange);
 document.getElementById('thisWeekBtn').addEventListener('click', setThisWeekRange);
 document.getElementById('generateReportBtn').addEventListener('click', buildRangeReport);
+document.getElementById('classChartBtn').addEventListener('click', buildClassChart);
 
-async function buildRangeReport() {
+// Shared by both exports: validate the date range, fetch, and return the
+// range-filtered, junk-stripped, chronologically-sorted entries (or null on
+// a validation/fetch error, having already set an error status).
+async function loadReportEntries() {
   const start = document.getElementById('reportStart').value;
   const end = document.getElementById('reportEnd').value;
-  if (!start || !end) { setStatus('Pick a start and end date', 'error'); return; }
-  if (end < start) { setStatus('End date is before start date', 'error'); return; }
+  if (!start || !end) { setStatus('Pick a start and end date', 'error'); return null; }
+  if (end < start) { setStatus('End date is before start date', 'error'); return null; }
 
   setStatus('Building report…');
   let rows;
@@ -1030,7 +1046,7 @@ async function buildRangeReport() {
     rows = await res.json();
   } catch (err) {
     setStatus('Could not load entries — check connection', 'error');
-    return;
+    return null;
   }
 
   const entries = (rows || [])
@@ -1038,6 +1054,13 @@ async function buildRangeReport() {
     .filter(e => e.session_date >= start && e.session_date <= end)
     .filter(e => !isJunk(e))
     .sort((a, b) => (a.session_date + (a.start_time || '')).localeCompare(b.session_date + (b.start_time || '')));
+  return { start, end, entries };
+}
+
+async function buildRangeReport() {
+  const loaded = await loadReportEntries();
+  if (!loaded) return;
+  const { start, end, entries } = loaded;
 
   const totalMins = entries.reduce((sum, e) => sum + durationMins(e), 0);
   const daySet = new Set(entries.map(e => e.session_date));
@@ -1062,7 +1085,7 @@ async function buildRangeReport() {
     byDate.get(e.session_date).push(e);
   });
 
-  const energyLabelMap = { low: 'Low', good: 'Good', fire: '🔥' };
+  const energyLabelMap = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
   let detailHtml = '';
   [...byDate.keys()].sort().forEach(date => {
     const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
@@ -1123,6 +1146,118 @@ async function buildRangeReport() {
     ${categoryRows ? `<div class="cat-heading">Categories touched</div>${categoryRows}` : ''}
     <div class="section-heading">Session detail</div>
     ${detailHtml || '<div style="font-size:13px;color:#7A5535;font-style:italic;">No entries in this range.</div>'}
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+
+  document.getElementById('exportPanel').style.display = 'none';
+  setStatus('Not saved yet');
+}
+
+// --- Class chart export ------------------------------------------------
+// The gradeable grid required by class: one row per session, with tempo in
+// its own column so progress reads straight down the page. Extraction helpers
+// below split the JSON into the template's fixed columns.
+
+// Warm-up column (Scales / Arpeggios): the practiced keys + scale type.
+function warmupCell(e, activity) {
+  const v = (e.technique_json || {})[activity];
+  if (!v) return '';
+  const hasKeys = Array.isArray(v.keys) && v.keys.length > 0;
+  if (!hasKeys) return '';
+  return v.keys.join(', ') + (nonEmpty(v.scaleType) ? ` (${v.scaleType})` : '');
+}
+
+// Composer / Pieces column: every named piece across Technical piece and the
+// repertoire pickers (Traditionally notated / Lead sheet). No BPM here — that
+// lives in its own Tempo column.
+function chartPieces(e) {
+  const names = [];
+  for (const [name, v] of Object.entries(e.technique_json || {})) {
+    if (name === 'Scales' || name === 'Arpeggios') continue;
+    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
+  }
+  for (const v of Object.values(e.repertoire_json || {})) {
+    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
+  }
+  return names;
+}
+
+// Tempo column: per-piece BPM (start→end) for any piece that logged one.
+function chartTempo(e) {
+  const out = [];
+  const scan = obj => {
+    for (const v of Object.values(obj || {})) {
+      if (!hasPieces(v)) continue;
+      v.pieces.forEach(p => {
+        if (nonEmpty(p && p.name) && (nonEmpty(p.bpmstart) || nonEmpty(p.bpmend)))
+          out.push(`${p.name} ${p.bpmstart || '?'}→${p.bpmend || '?'}`);
+      });
+    }
+  };
+  scan(e.technique_json);
+  scan(e.repertoire_json);
+  return out;
+}
+
+async function buildClassChart() {
+  const loaded = await loadReportEntries();
+  if (!loaded) return;
+  const { start, end, entries } = loaded;
+
+  const totalMins = entries.reduce((sum, e) => sum + durationMins(e), 0);
+  const daysPracticed = new Set(entries.map(e => e.session_date)).size;
+  const moodMap = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
+
+  const rowsHtml = entries.map(e => {
+    const dateLabel = toDateOnly(e.session_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: '2-digit' });
+    const scales = warmupCell(e, 'Scales');
+    const arps = warmupCell(e, 'Arpeggios');
+    const pieces = chartPieces(e);
+    const tempo = chartTempo(e);
+    const notes = collectNotes(e);
+    const notesHtml = notes.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('');
+    return `<tr>
+      <td class="date">${escapeHtml(dateLabel)}</td>
+      <td class="time">${escapeHtml(formatTimeRange(e))}</td>
+      <td>${escapeHtml(scales)}</td>
+      <td>${escapeHtml(arps)}</td>
+      <td class="piece">${pieces.map(escapeHtml).join('<br>')}</td>
+      <td class="tempo">${tempo.map(escapeHtml).join('<br>')}</td>
+      <td class="notes">${notesHtml}</td>
+      <td class="center">${e.recording ? '✓' : ''}</td>
+      <td>${escapeHtml(moodMap[e.energy] || e.energy || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const rangeLabel = `${formatDateLabel(start)} &ndash; ${formatDateLabel(end)}`;
+
+  const html = `<html><head><title>Practice chart</title><style>
+    @page { size: landscape; margin: 0.5in; }
+    body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;padding:24px;}
+    h1{font-size:18px;margin:0 0 2px;}
+    .meta{font-size:11px;color:#555;margin-bottom:14px;}
+    table{border-collapse:collapse;width:100%;font-size:10px;}
+    th,td{border:0.5px solid #999;padding:5px 6px;vertical-align:top;text-align:left;}
+    th{background:#eee;font-size:9px;text-transform:uppercase;letter-spacing:0.03em;}
+    td.center{text-align:center;font-weight:bold;}
+    td.date,td.time,td.tempo{white-space:nowrap;}
+    td.piece{font-weight:bold;}
+    td.notes b{font-weight:normal;font-style:italic;color:#555;}
+    td.notes div{margin-bottom:2px;}
+    tbody tr:nth-child(even){background:#fafafa;}
+  </style></head><body>
+    <h1>Practice chart</h1>
+    <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel} &middot; ${fmtMins(totalMins)} over ${daysPracticed} day${daysPracticed === 1 ? '' : 's'}</div>
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Time</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Composer / Pieces</th><th>Tempo</th><th>Notes</th><th>Rec.</th><th>Mood</th>
+      </tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="9" style="text-align:center;font-style:italic;color:#777;padding:20px;">No entries in this range.</td></tr>'}</tbody>
+    </table>
   </body></html>`;
 
   const w = window.open('', '_blank');
