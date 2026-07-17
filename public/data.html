@@ -378,6 +378,10 @@ function localDateStr(d){
 }
 
 const ENERGY = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
+// Mood is stored comma-joined (multi-select); render each part as a readable label.
+function moodLabel(energyStr) {
+  return (energyStr || '').split(',').map(s => s.trim()).filter(Boolean).map(v => ENERGY[v] || v).join(', ');
+}
 
 async function fetchAll(){
   document.getElementById('loadingState').style.display = 'block';
@@ -516,7 +520,7 @@ function render(){
       <td><span class="cell-end">${escapeHtml(formatTime12(e.end_time))}</span></td>
       <td><input class="cell-in cell-dur" type="number" min="0" step="5" value="${durationMins(e)}" data-id="${e.id}" data-f="duration"><span class="dur-unit">min</span></td>
       <td><div class="activity">${activityHtml}</div></td>
-      <td><span class="cell-energy-ro">${escapeHtml(ENERGY[e.energy] || e.energy || '')}</span>${e.recording ? '<span class="rec-badge">● REC</span>' : ''}</td>
+      <td><span class="cell-energy-ro">${escapeHtml(moodLabel(e.energy))}</span>${e.recording ? '<span class="rec-badge">● REC</span>' : ''}</td>
       <td><textarea class="cell-in cell-win" rows="1" placeholder="—" data-id="${e.id}" data-f="win">${escapeHtml(e.win||'')}</textarea></td>
       <td><div class="row-actions">
         <a class="icon-btn" href="./index.html?edit=${e.id}">Edit details ▸</a>

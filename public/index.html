@@ -251,7 +251,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     <label class="rec-check" style="margin-left: auto;"><input type="checkbox" id="recordingChk"> Recorded myself</label>
   </div>
   <div class="energy-pips" id="energyPips" style="margin-bottom: 18px;">
-    <div class="epip active" data-val="focused">Focused</div>
+    <div class="epip" data-val="focused">Focused</div>
     <div class="epip" data-val="energized">Energized</div>
     <div class="epip" data-val="calm">Calm</div>
     <div class="epip" data-val="tired">Tired</div>
@@ -326,7 +326,12 @@ const repItems = [
 
 let currentId = null;
 let sessionNum = 1;
-let energyVal = 'focused';
+let moodVals = []; // multi-select; empty = nothing chosen. Stored comma-joined in `energy`.
+const MOOD_LABELS = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
+// Renders a comma-joined mood value (or legacy single value) as a readable list.
+function moodLabel(energyStr) {
+  return (energyStr || '').split(',').map(s => s.trim()).filter(Boolean).map(v => MOOD_LABELS[v] || v).join(', ');
+}
 let isDark = false;
 
 function setCurrentId(id) {
@@ -748,9 +753,8 @@ document.getElementById('energyPips').addEventListener('click', e => {
   const ep = e.target.closest('.epip');
   if (!ep) return;
   if (document.querySelector('.wrap').classList.contains('dimmed')) hideNewEntryPrompt();
-  document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
-  ep.classList.add('active');
-  energyVal = ep.dataset.val;
+  ep.classList.toggle('active');
+  moodVals = Array.from(document.querySelectorAll('#energyPips .epip.active')).map(p => p.dataset.val);
 });
 
 document.getElementById('modeBtn').addEventListener('click', () => {
@@ -807,7 +811,7 @@ function collectData() {
     start_time: document.getElementById('startTime').value,
     end_time: document.getElementById('endTime').value,
     session_num: sessionNum,
-    energy: energyVal,
+    energy: moodVals.join(','),
     recording: document.getElementById('recordingChk').checked ? 1 : 0,
     win: document.getElementById('winField').value,
     technique_json: technique,
@@ -907,8 +911,7 @@ function newEntry() {
   document.getElementById('winField').value = '';
   document.getElementById('recordingChk').checked = false;
   document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
-  document.querySelector('#energyPips .epip[data-val="focused"]').classList.add('active');
-  energyVal = 'focused';
+  moodVals = [];
   resetSessionMeta();
   setSessionNum(sessionNum + 1);
   setStatus('Not saved yet');
@@ -986,9 +989,11 @@ async function loadEntry(id) {
     document.getElementById('winField').value = row.win || '';
     document.getElementById('recordingChk').checked = !!row.recording;
     document.querySelectorAll('#energyPips .epip').forEach(p => p.classList.remove('active'));
-    const epEl = document.querySelector(`#energyPips .epip[data-val="${row.energy || 'focused'}"]`);
-    if (epEl) epEl.classList.add('active');
-    energyVal = row.energy || 'focused';
+    moodVals = (row.energy || '').split(',').map(s => s.trim()).filter(Boolean);
+    moodVals.forEach(val => {
+      const epEl = document.querySelector(`#energyPips .epip[data-val="${val}"]`);
+      if (epEl) epEl.classList.add('active');
+    });
 
     setSessionNum(row.session_num || 1);
     setCurrentId(row.id);
@@ -1136,7 +1141,6 @@ async function buildRangeReport() {
     byDate.get(e.session_date).push(e);
   });
 
-  const energyLabelMap = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
   let detailHtml = '';
   [...byDate.keys()].sort().forEach(date => {
     const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
@@ -1154,7 +1158,7 @@ async function buildRangeReport() {
         <div class="stat-block"><span class="stat-num">${mins}</span><span class="stat-unit">min</span></div>
         <div class="entry-info">
           ${activityHtml}
-          <span class="entry-meta">${escapeHtml(formatTimeRange(e))}, ${energyLabelMap[e.energy] || escapeHtml(e.energy || '')}</span>
+          <span class="entry-meta">${escapeHtml(formatTimeRange(e))}${moodLabel(e.energy) ? ', ' + escapeHtml(moodLabel(e.energy)) : ''}</span>
           ${e.win ? `<div class="entry-win">${escapeHtml(e.win)}</div>` : ''}
           ${notesList.length ? `<div class="entry-notes">${notesList.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('')}</div>` : ''}
         </div>
@@ -1274,7 +1278,6 @@ async function buildClassChart() {
 
   const totalMins = entries.reduce((sum, e) => sum + durationMins(e), 0);
   const daysPracticed = new Set(entries.map(e => e.session_date)).size;
-  const moodMap = { focused: 'Focused', energized: 'Energized', calm: 'Calm', tired: 'Tired', frustrated: 'Frustrated', low: 'Low', good: 'Good', fire: '🔥' };
 
   const rowsHtml = entries.map(e => {
     const dateLabel = toDateOnly(e.session_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: '2-digit' });
@@ -1295,7 +1298,7 @@ async function buildClassChart() {
       <td class="sight">${sight}</td>
       <td class="notes">${notesHtml}</td>
       <td class="center">${e.recording ? '✓' : ''}</td>
-      <td>${escapeHtml(moodMap[e.energy] || e.energy || '')}</td>
+      <td>${escapeHtml(moodLabel(e.energy))}</td>
     </tr>`;
   }).join('');
 

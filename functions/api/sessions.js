@@ -30,7 +30,7 @@ export async function onRequest(context) {
         "INSERT INTO sessions (session_date, start_time, end_time, session_num, energy, recording, win, technique_json, repertoire_json) VALUES (?,?,?,?,?,?,?,?,?)"
       ).bind(
         b.session_date, b.start_time, b.end_time || null,
-        b.session_num || 1, b.energy || 'good', b.recording ? 1 : 0, b.win || null,
+        b.session_num || 1, b.energy || '', b.recording ? 1 : 0, b.win || null,
         JSON.stringify(b.technique_json || {}),
         JSON.stringify(b.repertoire_json || {})
       ).run();
@@ -44,7 +44,7 @@ export async function onRequest(context) {
         "UPDATE sessions SET session_date=?, start_time=?, end_time=?, session_num=?, energy=?, recording=?, win=?, technique_json=?, repertoire_json=?, updated_at=datetime('now') WHERE id=?"
       ).bind(
         b.session_date, b.start_time, b.end_time || null,
-        b.session_num || 1, b.energy || 'good', b.recording ? 1 : 0, b.win || null,
+        b.session_num || 1, b.energy || '', b.recording ? 1 : 0, b.win || null,
         JSON.stringify(b.technique_json || {}),
         JSON.stringify(b.repertoire_json || {}),
         b.id
