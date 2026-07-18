@@ -123,6 +123,7 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .piece-detail input::-webkit-outer-spin-button, .piece-detail input::-webkit-inner-spin-button { -webkit-appearance: none; }
 .piece-detail .pd-bpmstart, .piece-detail .pd-bpmend { width: 38px; }
 .piece-detail .pd-measures { width: 120px; text-align: left; flex-shrink: 0; }
+.piece-detail .pd-minutes { width: 46px; }
 .divider-rep { height: 1px; background: var(--divider); margin: 20px 0; position: relative; }
 .divider-rep::after { content: '— repertoire —'; position: absolute; left: 50%; transform: translateX(-50%); top: -8px; background: var(--bg); padding: 0 10px; font-size: 10px; color: var(--muted); letter-spacing: 0.1em; font-style: italic; white-space: nowrap; }
 .rep-block { margin-bottom: 12px; }
@@ -407,11 +408,13 @@ function addPieceDetailRow(root, name, values = {}) {
       <input type="number" class="pd-bpmstart" placeholder="start" value="${escapeHtml(values.bpmstart || '')}">
       <span class="metro-sep">→</span>
       <input type="number" class="pd-bpmend" placeholder="end" value="${escapeHtml(values.bpmend || '')}">
+      <input type="number" class="pd-minutes" placeholder="min" value="${escapeHtml(values.minutes || '')}">
     `;
   } else {
     row.innerHTML = `
       <span class="piece-detail-name">${escapeHtml(name)}</span>
       <input type="text" class="pd-measures" placeholder="Measures / portion" value="${escapeHtml(values.measures || '')}">
+      <input type="number" class="pd-minutes" placeholder="min" value="${escapeHtml(values.minutes || '')}">
     `;
   }
   root.querySelector('.piece-detail-list').appendChild(row);
@@ -779,7 +782,8 @@ function collectData() {
       const pieces = Array.from(root.querySelectorAll('.piece-detail')).map(el => ({
         name: el.dataset.name,
         bpmstart: el.querySelector('.pd-bpmstart').value,
-        bpmend: el.querySelector('.pd-bpmend').value
+        bpmend: el.querySelector('.pd-bpmend').value,
+        minutes: el.querySelector('.pd-minutes').value
       }));
       technique[t] = { pieces, notes };
     } else {
@@ -796,7 +800,8 @@ function collectData() {
       const root = document.querySelector(`.piece-picker[data-repkey="${r.key}"]`);
       const pieces = Array.from(root.querySelectorAll('.piece-detail')).map(el => ({
         name: el.dataset.name,
-        measures: el.querySelector('.pd-measures').value
+        measures: el.querySelector('.pd-measures').value,
+        minutes: el.querySelector('.pd-minutes').value
       }));
       repertoire[r.label] = { pieces, notes };
     } else {
@@ -1144,7 +1149,8 @@ async function buildRangeReport() {
   let detailHtml = '';
   [...byDate.keys()].sort().forEach(date => {
     const dayLabel = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
-    detailHtml += `<div class="day-heading">${escapeHtml(dayLabel)}</div>`;
+    const dayMins = byDate.get(date).reduce((sum, e) => sum + durationMins(e), 0);
+    detailHtml += `<div class="day-heading">${escapeHtml(dayLabel)} &middot; ${fmtMins(dayMins)}</div>`;
     byDate.get(date).forEach(e => {
       const mins = durationMins(e);
       const activities = activityDetails(e);
@@ -1227,19 +1233,20 @@ function warmupCell(e, activity) {
 }
 
 // Composer / Pieces column: every named piece across Technical piece and the
-// repertoire pickers (Traditionally notated / Lead sheet). Sight reading is
-// excluded — it has its own column. No BPM here — that lives in Tempo.
+// repertoire pickers (Traditionally notated / Lead sheet), each with the minutes
+// spent on it (when logged). Sight reading is excluded — it has its own column.
+// No BPM here — that lives in Tempo.
 function chartPieces(e) {
-  const names = [];
+  const out = [];
   for (const [name, v] of Object.entries(e.technique_json || {})) {
     if (name === 'Scales' || name === 'Arpeggios') continue;
-    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
+    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) out.push({ name: p.name, minutes: p.minutes }); });
   }
   for (const [name, v] of Object.entries(e.repertoire_json || {})) {
     if (name === 'Sight reading') continue;
-    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
+    if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) out.push({ name: p.name, minutes: p.minutes }); });
   }
-  return names;
+  return out;
 }
 
 // Sight reading column: what was read (piece names + measures) plus any notes.
@@ -1248,7 +1255,7 @@ function chartSightReading(e) {
   if (!v) return '';
   const parts = [];
   if (hasPieces(v)) v.pieces.forEach(p => {
-    if (nonEmpty(p && p.name)) parts.push(escapeHtml(p.name + (nonEmpty(p.measures) ? ` (${p.measures})` : '')));
+    if (nonEmpty(p && p.name)) parts.push(escapeHtml(p.name + (nonEmpty(p.measures) ? ` (${p.measures})` : '') + (nonEmpty(p.minutes) ? ` · ${p.minutes} min` : '')));
   });
   if (nonEmpty(v.notes)) parts.push(`<span class="sr-note">${escapeHtml(v.notes)}</span>`);
   return parts.join('<br>');
@@ -1279,28 +1286,53 @@ async function buildClassChart() {
   const totalMins = entries.reduce((sum, e) => sum + durationMins(e), 0);
   const daysPracticed = new Set(entries.map(e => e.session_date)).size;
 
-  const rowsHtml = entries.map(e => {
+  // Each piece stacks its name over a short rule with its minutes underneath.
+  const pieceCell = pieces => pieces.map(p => {
+    const min = nonEmpty(p.minutes) ? `<div class="pc-rule"></div><span class="pc-min">${escapeHtml(p.minutes)} min</span>` : '';
+    return `<div class="pc-piece">${escapeHtml(p.name)}${min}</div>`;
+  }).join('');
+
+  // A bold subtotal row closing a day, plus the day's summed clock time.
+  const daySumRow = (date, mins) => {
+    const label = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+    return `<tr class="day-sum"><td colspan="9">${escapeHtml(label)} total</td><td>${mins} min</td></tr>`;
+  };
+
+  // Entries are pre-sorted by date then time, so rows for one day are contiguous:
+  // we emit a heavy top rule on each day's first row and a subtotal after its last.
+  let rowsHtml = '';
+  let curDate = null;
+  let dayMins = 0;
+  entries.forEach(e => {
+    let isFirst = false;
+    if (e.session_date !== curDate) {
+      if (curDate !== null) rowsHtml += daySumRow(curDate, dayMins);
+      curDate = e.session_date;
+      dayMins = 0;
+      isFirst = true;
+    }
+    dayMins += durationMins(e);
     const dateLabel = toDateOnly(e.session_date).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: '2-digit' });
     const scales = warmupCell(e, 'Scales');
     const arps = warmupCell(e, 'Arpeggios');
-    const pieces = chartPieces(e);
     const tempo = chartTempo(e);
     const sight = chartSightReading(e);
     const notes = collectNotes(e).filter(n => n.label !== 'Sight reading');
     const notesHtml = notes.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('');
-    return `<tr>
+    rowsHtml += `<tr class="${isFirst ? 'day-start' : ''}">
       <td class="date">${escapeHtml(dateLabel)}</td>
       <td class="time">${escapeHtml(formatTimeRange(e))}</td>
       <td>${escapeHtml(scales)}</td>
       <td>${escapeHtml(arps)}</td>
-      <td class="piece">${pieces.map(escapeHtml).join('<br>')}</td>
+      <td class="piece">${pieceCell(chartPieces(e))}</td>
       <td class="tempo">${tempo.map(escapeHtml).join('<br>')}</td>
       <td class="sight">${sight}</td>
       <td class="notes">${notesHtml}</td>
       <td class="center">${e.recording ? '✓' : ''}</td>
       <td>${escapeHtml(moodLabel(e.energy))}</td>
     </tr>`;
-  }).join('');
+  });
+  if (curDate !== null) rowsHtml += daySumRow(curDate, dayMins);
 
   const rangeLabel = `${formatDateLabel(start)} &ndash; ${formatDateLabel(end)}`;
 
@@ -1318,7 +1350,12 @@ async function buildClassChart() {
     td.notes b{font-weight:normal;font-style:italic;color:#555;}
     td.notes div{margin-bottom:2px;}
     td.sight .sr-note{font-style:italic;color:#555;}
+    td.piece .pc-piece{margin-bottom:5px;}
+    td.piece .pc-rule{border-top:0.5px solid #bbb;width:60%;margin:2px 0;}
+    td.piece .pc-min{font-weight:normal;color:#555;}
     tbody tr:nth-child(even){background:#fafafa;}
+    tr.day-start td{border-top:2px solid #333;}
+    tr.day-sum td{background:#f0f0f0;font-weight:bold;text-align:right;border-top:1px solid #333;}
   </style></head><body>
     <h1>Practice chart</h1>
     <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel} &middot; ${fmtMins(totalMins)} over ${daysPracticed} day${daysPracticed === 1 ? '' : 's'}</div>
