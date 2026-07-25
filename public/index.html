@@ -301,9 +301,9 @@ const API_PIECES = '/api/pieces';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
 const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
 const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
-const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios'];
+const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios','Chord progressions'];
 const PIECE_PICKER_TECHNIQUES = ['Technical piece'];
-const PIECE_PICKER_REP_KEYS = ['trad', 'lead', 'sight']; // repItems keys that get a song picker instead of plain measures text
+const PIECE_PICKER_REP_KEYS = ['trad', 'lead', 'sight', 'listen']; // repItems keys that get a song picker instead of plain measures text
 const PASSWORD_KEY = 'practice_log_password';
 
 function getStoredPassword() {
@@ -316,12 +316,14 @@ function apiFetch(url, options = {}) {
   const headers = Object.assign({}, options.headers, { 'X-App-Password': getStoredPassword() });
   return fetch(url, Object.assign({}, options, { headers }));
 }
-const pieceLists = { technical: [], repertoire: [], sightreading: [] }; // category -> [{id, name, category}], fetched from API
+const pieceLists = { technical: [], repertoire: [] }; // category -> [{id, name, category}], fetched from API
+// All four repertoire sections share one song list ('repertoire'), so a song
+// added anywhere shows up as a pill everywhere.
 const repItems = [
   { label: 'Traditionally notated', key: 'trad', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
   { label: 'Lead sheet', key: 'lead', notesPlaceholder: 'What did you accomplish? Trouble spots? Questions?' },
-  { label: 'Sight reading', key: 'sight', category: 'sightreading', notesPlaceholder: 'What did you sight-read? How did it go?' },
-  { label: 'Listening assignments', key: 'listen', notesPlaceholder: 'Observations, things to apply to your playing...' }
+  { label: 'Sight reading', key: 'sight', notesPlaceholder: 'What did you sight-read? How did it go?' },
+  { label: 'Listening assignments', key: 'listen', measuresPlaceholder: 'Recording / what to listen for', notesPlaceholder: 'Observations, things to apply to your playing...' }
 ];
 
 let currentId = null;
@@ -411,7 +413,7 @@ function addPieceDetailRow(root, name, values = {}) {
   } else {
     row.innerHTML = `
       <span class="piece-detail-name">${escapeHtml(name)}</span>
-      <input type="text" class="pd-measures" placeholder="Measures / portion" value="${escapeHtml(values.measures || '')}">
+      <input type="text" class="pd-measures" placeholder="${escapeHtml(root.dataset.measuresPlaceholder || 'Measures / portion')}" value="${escapeHtml(values.measures || '')}">
     `;
   }
   root.querySelector('.piece-detail-list').appendChild(row);
@@ -519,7 +521,7 @@ repItems.forEach(r => {
   const block = document.createElement('div');
   block.className = 'rep-block';
   const pieceFieldHtml = PIECE_PICKER_REP_KEYS.includes(r.key) ? `
-    <div class="piece-picker" data-repkey="${r.key}" data-category="${r.category || 'repertoire'}" data-fields="measures">
+    <div class="piece-picker" data-repkey="${r.key}" data-category="${r.category || 'repertoire'}" data-fields="measures" data-measures-placeholder="${escapeHtml(r.measuresPlaceholder || 'Measures / portion')}">
       <div class="piece-chips" data-repkey="${r.key}"></div>
       <input class="t-input piece-add-input" type="text" placeholder="+ Add new piece (press Enter)" data-repkey="${r.key}">
       <div class="piece-detail-list" data-repkey="${r.key}"></div>
@@ -1229,7 +1231,8 @@ function warmupCell(e, activity) {
 
 // Composer / Pieces column: every named piece across Technical piece and the
 // repertoire pickers (Traditionally notated / Lead sheet). Sight reading is
-// excluded — it has its own column. No BPM here — that lives in Tempo.
+// excluded — it has its own column — as is Listening, which isn't playing time.
+// No BPM here — that lives in Tempo.
 function chartPieces(e) {
   const names = [];
   for (const [name, v] of Object.entries(e.technique_json || {})) {
@@ -1237,7 +1240,7 @@ function chartPieces(e) {
     if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
   }
   for (const [name, v] of Object.entries(e.repertoire_json || {})) {
-    if (name === 'Sight reading') continue;
+    if (name === 'Sight reading' || name === 'Listening assignments') continue;
     if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
   }
   return names;
@@ -1370,7 +1373,6 @@ document.querySelectorAll('input, textarea').forEach(el => {
 function initApp() {
   loadPieces('technical');
   loadPieces('repertoire');
-  loadPieces('sightreading');
   fetchSessionCount(document.getElementById('sessionDate').value);
   loadStats();
   // Deep link from the data page's "Edit details" (data.html?edit=<id> -> index.html?edit=<id>)
