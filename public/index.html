@@ -1220,7 +1220,8 @@ async function buildRangeReport() {
 // its own column so progress reads straight down the page. Extraction helpers
 // below split the JSON into the template's fixed columns.
 
-// Warm-up column (Scales / Arpeggios): the practiced keys + scale type.
+// Warm-up column (Scales / Arpeggios / Chord progressions): the practiced
+// keys + scale type.
 function warmupCell(e, activity) {
   const v = (e.technique_json || {})[activity];
   if (!v) return '';
@@ -1232,11 +1233,13 @@ function warmupCell(e, activity) {
 // Composer / Pieces column: every named piece across Technical piece and the
 // repertoire pickers (Traditionally notated / Lead sheet). Sight reading is
 // excluded — it has its own column — as is Listening, which isn't playing time.
-// No BPM here — that lives in Tempo.
+// Scales/Arpeggios/Chord progressions are excluded too — they're key-grid
+// warm-ups with their own columns, not named pieces. No BPM here — that
+// lives in Tempo.
 function chartPieces(e) {
   const names = [];
   for (const [name, v] of Object.entries(e.technique_json || {})) {
-    if (name === 'Scales' || name === 'Arpeggios') continue;
+    if (name === 'Scales' || name === 'Arpeggios' || name === 'Chord progressions') continue;
     if (hasPieces(v)) v.pieces.forEach(p => { if (nonEmpty(p && p.name)) names.push(p.name); });
   }
   for (const [name, v] of Object.entries(e.repertoire_json || {})) {
@@ -1292,11 +1295,13 @@ async function buildClassChart() {
     byDate.get(e.session_date).push(e);
   });
 
-  // Day header: date on the left, day total in the Duration column so it aligns
-  // above the session durations below it. The remaining columns span empty.
+  // Day header: a full-width banner carrying the date + day total, instead of
+  // a dedicated Date column. Every session row already left that column blank
+  // (the date only ever appeared once per day), so folding it into a banner
+  // reclaims a whole column's width for every row, not just the header.
   const dayHeadRow = (date, mins) => {
     const label = toDateOnly(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    return `<tr class="day-head"><td class="date">${escapeHtml(label)}</td><td></td><td class="dur">${mins} min</td><td colspan="8"></td></tr>`;
+    return `<tr class="day-head"><td colspan="10">${escapeHtml(label)} <span class="day-total">${mins} min</span></td></tr>`;
   };
 
   let rowsHtml = '';
@@ -1307,22 +1312,26 @@ async function buildClassChart() {
     dayEntries.forEach(e => {
       const scales = warmupCell(e, 'Scales');
       const arps = warmupCell(e, 'Arpeggios');
+      const chords = warmupCell(e, 'Chord progressions');
       const tempo = chartTempo(e);
       const sight = chartSightReading(e);
       const notes = collectNotes(e).filter(n => n.label !== 'Sight reading');
+      // Notes / Mood share one column: any per-item notes stack first (each
+      // already carries its own label, e.g. "Scales: ..."), then mood always
+      // trails as its own line so the column never reads as truncated.
       const notesHtml = notes.map(n => `<div><b>${escapeHtml(n.label)}:</b> ${escapeHtml(n.notes)}</div>`).join('');
+      const moodHtml = `<div class="mood-line">Mood: ${escapeHtml(moodLabel(e.energy))}</div>`;
       rowsHtml += `<tr>
-        <td class="date"></td>
         <td class="time">${escapeHtml(formatTimeRange(e))}</td>
         <td class="dur">${durationMins(e)} min</td>
         <td>${escapeHtml(scales)}</td>
         <td>${escapeHtml(arps)}</td>
+        <td>${escapeHtml(chords)}</td>
         <td class="piece">${chartPieces(e).map(escapeHtml).join('<br>')}</td>
         <td class="tempo">${tempo.map(escapeHtml).join('<br>')}</td>
         <td class="sight">${sight}</td>
-        <td class="notes">${notesHtml}</td>
+        <td class="notes">${notesHtml}${moodHtml}</td>
         <td class="center">${e.recording ? '✓' : ''}</td>
-        <td>${escapeHtml(moodLabel(e.energy))}</td>
       </tr>`;
     });
   });
@@ -1338,20 +1347,22 @@ async function buildClassChart() {
     th,td{border:0.5px solid #999;padding:5px 6px;vertical-align:top;text-align:left;}
     th{background:#eee;font-size:9px;text-transform:uppercase;letter-spacing:0.03em;}
     td.center{text-align:center;font-weight:bold;}
-    td.date,td.time,td.dur,td.tempo{white-space:nowrap;}
+    td.time,td.dur,td.tempo{white-space:nowrap;}
     td.notes b{font-weight:normal;font-style:italic;color:#555;}
     td.notes div{margin-bottom:2px;}
+    td.notes .mood-line{font-style:italic;color:#555;}
     td.sight .sr-note{font-style:italic;color:#555;}
     tbody tr:nth-child(even){background:#fafafa;}
     tr.day-head td{border-top:2px solid #333;background:#f0f0f0;font-size:13px;font-weight:bold;}
+    tr.day-head .day-total{font-weight:normal;color:#555;font-size:11px;}
   </style></head><body>
     <h1>Practice chart</h1>
     <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel} &middot; ${fmtMins(totalMins)} over ${daysPracticed} day${daysPracticed === 1 ? '' : 's'}</div>
     <table>
       <thead><tr>
-        <th>Date</th><th>Time</th><th>Duration</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Composer / Pieces</th><th>Tempo</th><th>Sight reading</th><th>Notes</th><th>Rec.</th><th>Mood</th>
+        <th>Time</th><th>Duration</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Warm-up: Chords</th><th>Composer / Pieces</th><th>Tempo</th><th>Sight reading</th><th>Notes / Mood</th><th>Rec.</th>
       </tr></thead>
-      <tbody>${rowsHtml || '<tr><td colspan="11" style="text-align:center;font-style:italic;color:#777;padding:20px;">No entries in this range.</td></tr>'}</tbody>
+      <tbody>${rowsHtml || '<tr><td colspan="10" style="text-align:center;font-style:italic;color:#777;padding:20px;">No entries in this range.</td></tr>'}</tbody>
     </table>
   </body></html>`;
 
