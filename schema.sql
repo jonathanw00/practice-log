@@ -16,11 +16,13 @@ CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(session_date);
 
 -- Shared list backing the Technical piece / Traditionally notated / Lead
 -- sheet chip pickers; category keeps the pickers from mixing etudes into
--- the song list or vice versa. See migrations/0001_pieces_category.sql.
+-- the song list or vice versa. See migrations/0001_pieces_category.sql and
+-- migrations/0003_pieces_assigned.sql.
 CREATE TABLE IF NOT EXISTS pieces (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'technical',
+  assigned INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(name, category)
 );
