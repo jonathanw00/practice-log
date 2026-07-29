@@ -27,3 +27,16 @@ CREATE TABLE IF NOT EXISTS pieces (
   UNIQUE(name, category)
 );
 CREATE INDEX IF NOT EXISTS idx_pieces_category ON pieces(category);
+
+-- Semester overview (goals, instructor, technical requirements). Single row,
+-- enforced by CHECK (id = 1). Assigned pieces live on pieces.assigned rather
+-- than here, so there's one list of pieces in the app.
+-- See migrations/0004_semester_profile.sql.
+CREATE TABLE IF NOT EXISTS semester_profile (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  semester_label TEXT,
+  instructor_name TEXT,
+  goals TEXT,
+  technical_requirements TEXT,
+  updated_at TEXT DEFAULT (datetime('now'))
+);

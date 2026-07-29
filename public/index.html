@@ -54,6 +54,15 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
 .save-btn:hover { opacity: 0.85; }
 .meta-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.9fr; gap: 10px; margin-bottom: 14px; }
 .export-panel { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.sem-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.sem-grid > div { flex: 1 1 180px; }
+.sem-input { width: 100%; box-sizing: border-box; background: var(--input-bg); border: 0.5px solid var(--border); border-radius: 6px; padding: 7px 9px; font-size: 13px; font-family: inherit; color: var(--ink); outline: none; resize: vertical; }
+.sem-input::placeholder { color: var(--placeholder); font-style: italic; }
+.assigned-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.assigned-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 16px; border: 1.5px solid var(--border); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; background: var(--surface); }
+.assigned-chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+/* Category tag so an etude and a song are never confused in one mixed list. */
+.assigned-cat { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.65; }
 .meta-card { background: var(--card); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 14px; }
 .meta-label { font-size: 10px; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; }
 .meta-input { background: transparent; border: none; font-size: 15px; color: var(--ink); outline: none; width: 100%; font-family: inherit; }
@@ -174,9 +183,38 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
     <div class="top-actions">
       <a class="ghost-btn" href="data.html" style="text-decoration: none; display: inline-flex; align-items: center;">📋 All entries</a>
       <button class="ghost-btn" id="modeBtn">🌙 Dark</button>
+      <button class="ghost-btn" id="semesterBtn">Semester</button>
       <button class="ghost-btn" id="exportBtn">Export PDF</button>
       <button class="ghost-btn" id="deleteBtn">Delete entry</button>
       <button class="save-btn" id="saveBtn">Save session</button>
+    </div>
+  </div>
+
+  <div class="export-panel" id="semesterPanel" style="display: none;">
+    <div class="sem-grid">
+      <div>
+        <div class="meta-label">Semester</div>
+        <input class="sem-input" type="text" id="semLabel" placeholder="e.g. Fall 2026">
+      </div>
+      <div>
+        <div class="meta-label">Instructor</div>
+        <input class="sem-input" type="text" id="semInstructor" placeholder="Instructor name">
+      </div>
+    </div>
+    <div class="meta-label" style="margin-top: 12px;">Semester goals</div>
+    <textarea class="sem-input" id="semGoals" rows="3" placeholder="What you're aiming for this semester..."></textarea>
+    <div class="meta-label" style="margin-top: 12px;">Technical requirements</div>
+    <textarea class="sem-input" id="semTech" rows="3" placeholder="Scales, arpeggios, tempos required for jury/exam..."></textarea>
+
+    <!-- "Assigned pieces", not "Assigned repertoire": the list mixes technical
+         etudes and repertoire songs, so each chip carries its category. -->
+    <div class="meta-label" style="margin-top: 12px;">Assigned pieces <span style="text-transform: none; letter-spacing: 0;">— click to mark a piece as assigned this semester</span></div>
+    <div class="assigned-chips" id="semPieces"></div>
+
+    <div style="display: flex; align-items: center; gap: 10px; margin-top: 12px;">
+      <div class="save-status" id="semStatus" style="flex: 1;"></div>
+      <button class="ghost-btn" id="semCancelBtn" type="button">Close</button>
+      <button class="save-btn" id="semSaveBtn" type="button">Save semester</button>
     </div>
   </div>
 
@@ -300,6 +338,7 @@ const API = '/api/sessions';
 const API_STATS = '/api/stats';
 const API_DAY = '/api/day';
 const API_PIECES = '/api/pieces';
+const API_SEMESTER = '/api/semester';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
 const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
 const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
@@ -1095,6 +1134,94 @@ function setThisWeekRange() {
   document.getElementById('reportStart').value = localDateStr(thisSunday);
   document.getElementById('reportEnd').value = localDateStr(addDays(thisSunday, 6));
 }
+// ---- semester profile panel ----
+// Assigned pieces are the `assigned` flag on the shared pieces list, so the
+// chips here are the same names the entry-form pickers offer. The list mixes
+// categories, hence "Assigned pieces" and a per-chip category tag rather than
+// a repertoire-only heading.
+// 'sightreading' is a legacy category — those songs moved into 'repertoire'
+// when the song list was shared across all four repertoire sections.
+const PIECE_CATEGORY_LABELS = { technical: 'etude', repertoire: 'song', sightreading: 'song' };
+let semesterPieces = []; // [{ id, name, category, assigned }] as last loaded/saved
+
+function renderSemesterPieces() {
+  const box = document.getElementById('semPieces');
+  if (!semesterPieces.length) {
+    box.innerHTML = '<div class="sub" style="font-size: 12px;">No pieces yet — add them from the entry form pickers first.</div>';
+    return;
+  }
+  box.innerHTML = semesterPieces.map(p => `
+    <span class="assigned-chip${p.assigned ? ' active' : ''}" data-id="${p.id}">
+      ${escapeHtml(p.name)}
+      <span class="assigned-cat">${escapeHtml(PIECE_CATEGORY_LABELS[p.category] || p.category)}</span>
+    </span>
+  `).join('');
+}
+
+document.getElementById('semPieces').addEventListener('click', e => {
+  const chip = e.target.closest('.assigned-chip');
+  if (!chip) return;
+  const p = semesterPieces.find(x => String(x.id) === chip.dataset.id);
+  if (!p) return;
+  p.assigned = p.assigned ? 0 : 1;
+  chip.classList.toggle('active', !!p.assigned);
+});
+
+async function loadSemester() {
+  const status = document.getElementById('semStatus');
+  try {
+    const res = await apiFetch(API_SEMESTER);
+    if (!res.ok) throw new Error('load failed');
+    const data = await res.json();
+    const p = data.profile || {};
+    document.getElementById('semLabel').value = p.semester_label || '';
+    document.getElementById('semInstructor').value = p.instructor_name || '';
+    document.getElementById('semGoals').value = p.goals || '';
+    document.getElementById('semTech').value = p.technical_requirements || '';
+    semesterPieces = data.pieces || [];
+    renderSemesterPieces();
+    status.textContent = '';
+  } catch (err) {
+    status.textContent = "Couldn't load semester profile";
+  }
+}
+
+async function saveSemester() {
+  const status = document.getElementById('semStatus');
+  status.textContent = 'Saving...';
+  try {
+    const res = await apiFetch(API_SEMESTER, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        semester_label: document.getElementById('semLabel').value,
+        instructor_name: document.getElementById('semInstructor').value,
+        goals: document.getElementById('semGoals').value,
+        technical_requirements: document.getElementById('semTech').value,
+        assigned_ids: semesterPieces.filter(p => p.assigned).map(p => p.id)
+      })
+    });
+    if (!res.ok) throw new Error('save failed');
+    const data = await res.json();
+    semesterPieces = data.pieces || [];
+    renderSemesterPieces();
+    status.textContent = 'Saved';
+  } catch (err) {
+    status.textContent = "Couldn't save";
+  }
+}
+
+function toggleSemesterPanel() {
+  const panel = document.getElementById('semesterPanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  // Reload on each open so newly added pieces show up as chips.
+  if (opening) loadSemester();
+}
+document.getElementById('semesterBtn').addEventListener('click', toggleSemesterPanel);
+document.getElementById('semCancelBtn').addEventListener('click', () => { document.getElementById('semesterPanel').style.display = 'none'; });
+document.getElementById('semSaveBtn').addEventListener('click', saveSemester);
+
 document.getElementById('exportBtn').addEventListener('click', toggleExportPanel);
 document.getElementById('cancelReportBtn').addEventListener('click', () => { document.getElementById('exportPanel').style.display = 'none'; });
 document.getElementById('lastWeekBtn').addEventListener('click', setLastWeekRange);
