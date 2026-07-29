@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS semester_profile (
   technical_requirements TEXT,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- One reflection per Sun-Sat week, keyed by the Sunday's date. Surfaced at the
+-- top of the narrative PDF when the report range matches the week exactly.
+-- See migrations/0005_weekly_reflections.sql.
+CREATE TABLE IF NOT EXISTS weekly_reflections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  week_start TEXT NOT NULL UNIQUE,
+  key_achievement TEXT,
+  primary_challenge TEXT,
+  measures_for_review TEXT,
+  questions_for_instructor TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);

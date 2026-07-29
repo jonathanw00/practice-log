@@ -231,6 +231,29 @@ body { background: var(--bg); color: var(--ink); font-family: -apple-system, Bli
       <button class="ghost-btn" id="classChartBtn" type="button">Class chart</button>
       <button class="save-btn" id="generateReportBtn" type="button">Narrative PDF</button>
     </div>
+
+    <!-- Weekly reflection lives here because it's keyed to the same Sun-Sat
+         range as the export buttons above, and rides out on the narrative PDF. -->
+    <div id="reflectionBox" style="margin-top: 14px; border-top: 0.5px solid var(--border); padding-top: 12px;">
+      <div class="meta-label" id="reflectionHeading">Weekly reflection</div>
+      <div id="reflectionNotWeek" class="sub" style="font-size: 12px; display: none;">
+        Pick an exact Sunday&ndash;Saturday week (the buttons above) to write a reflection.
+      </div>
+      <div id="reflectionFields" style="display: none;">
+        <div class="meta-label" style="margin-top: 8px;">Key achievement</div>
+        <textarea class="sem-input" id="refAchievement" rows="2" placeholder="The one thing that moved forward this week..."></textarea>
+        <div class="meta-label" style="margin-top: 8px;">Primary technical challenge</div>
+        <textarea class="sem-input" id="refChallenge" rows="2" placeholder="What's fighting back right now..."></textarea>
+        <div class="meta-label" style="margin-top: 8px;">Specific measures for review</div>
+        <textarea class="sem-input" id="refMeasures" rows="2" placeholder="e.g. Sonatina mm. 24-31, LH voicing"></textarea>
+        <div class="meta-label" style="margin-top: 8px;">Questions for instructor</div>
+        <textarea class="sem-input" id="refQuestions" rows="2" placeholder="Anything to ask at the next lesson..."></textarea>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+          <div class="save-status" id="refStatus" style="flex: 1;"></div>
+          <button class="ghost-btn" id="refSaveBtn" type="button">Save reflection</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="stats-bar" id="statsBar">
@@ -339,10 +362,18 @@ const API_STATS = '/api/stats';
 const API_DAY = '/api/day';
 const API_PIECES = '/api/pieces';
 const API_SEMESTER = '/api/semester';
+const API_REFLECTION = '/api/weekly-reflection';
 const techniques = ['Scales','Arpeggios','Chord progressions','Technical piece'];
 const KEYS = ['C','G','D','A','E','B','F','Bb','Eb','Ab','Db','Gb'];
 const SCALE_ARPEGGIO_TYPES = ['Major','Minor']; // extend here as new types come up in class
+const PROGRESSION_TYPES = ['I–IV–V–I','I–vi–ii–V–I']; // extend as new progressions are assigned
 const KEY_GRID_TECHNIQUES = ['Scales','Arpeggios','Chord progressions'];
+// Each key-grid technique gets its own type pips; anything not listed falls
+// back to Major/Minor. Stored the same way either way (technique_json.scaleType).
+const TYPE_OPTIONS = { 'Chord progressions': PROGRESSION_TYPES };
+function typesFor(technique) {
+  return TYPE_OPTIONS[technique] || SCALE_ARPEGGIO_TYPES;
+}
 const PIECE_PICKER_TECHNIQUES = ['Technical piece'];
 const PIECE_PICKER_REP_KEYS = ['trad', 'lead', 'sight', 'listen']; // repItems keys that get a song picker instead of plain measures text
 const PASSWORD_KEY = 'practice_log_password';
@@ -395,7 +426,7 @@ techniques.forEach((t, i) => {
         ${KEYS.map(k => `<div class="key-chip" data-key="${k}">${k}</div>`).join('')}
       </div>
       <div class="type-pips" data-row="${i}">
-        ${SCALE_ARPEGGIO_TYPES.map(ty => `<div class="type-pip" data-type="${ty}">${ty}</div>`).join('')}
+        ${typesFor(t).map(ty => `<div class="type-pip" data-type="${ty}">${ty}</div>`).join('')}
       </div>
     `;
   } else if (PIECE_PICKER_TECHNIQUES.includes(t)) {
@@ -1123,16 +1154,19 @@ function toggleExportPanel() {
   const opening = panel.style.display === 'none';
   panel.style.display = opening ? 'block' : 'none';
   if (opening && !document.getElementById('reportStart').value) setLastWeekRange();
+  if (opening) syncReflectionPanel();
 }
 function setLastWeekRange() {
   const thisSunday = getSunday(new Date());
   document.getElementById('reportStart').value = localDateStr(addDays(thisSunday, -7));
   document.getElementById('reportEnd').value = localDateStr(addDays(thisSunday, -1));
+  syncReflectionPanel(); // setting .value programmatically doesn't fire 'change'
 }
 function setThisWeekRange() {
   const thisSunday = getSunday(new Date());
   document.getElementById('reportStart').value = localDateStr(thisSunday);
   document.getElementById('reportEnd').value = localDateStr(addDays(thisSunday, 6));
+  syncReflectionPanel();
 }
 // ---- semester profile panel ----
 // Assigned pieces are the `assigned` flag on the shared pieces list, so the
@@ -1222,6 +1256,79 @@ document.getElementById('semesterBtn').addEventListener('click', toggleSemesterP
 document.getElementById('semCancelBtn').addEventListener('click', () => { document.getElementById('semesterPanel').style.display = 'none'; });
 document.getElementById('semSaveBtn').addEventListener('click', saveSemester);
 
+// ---- weekly reflection ----
+// Keyed to a Sunday-anchored week. The reflection fields only apply when the
+// report range *is* exactly one Sun-Sat week, so the panel enables itself off
+// the same date inputs the exports use.
+// Returns the week_start (the Sunday) for an exact Sun-Sat range, else null.
+function rangeWeekStart(start, end) {
+  if (!start || !end) return null;
+  const s = toDateOnly(start);
+  if (s.getDay() !== 0) return null;
+  if (localDateStr(addDays(s, 6)) !== end) return null;
+  return start;
+}
+function currentReflectionWeek() {
+  return rangeWeekStart(document.getElementById('reportStart').value, document.getElementById('reportEnd').value);
+}
+
+const REFLECTION_FIELDS = {
+  refAchievement: 'key_achievement',
+  refChallenge: 'primary_challenge',
+  refMeasures: 'measures_for_review',
+  refQuestions: 'questions_for_instructor'
+};
+
+async function syncReflectionPanel() {
+  const week = currentReflectionWeek();
+  document.getElementById('reflectionFields').style.display = week ? 'block' : 'none';
+  document.getElementById('reflectionNotWeek').style.display = week ? 'none' : 'block';
+  document.getElementById('reflectionHeading').textContent = week
+    ? `Weekly reflection — week of ${formatDateLabel(week)}`
+    : 'Weekly reflection';
+  if (!week) return;
+  const status = document.getElementById('refStatus');
+  status.textContent = '';
+  try {
+    const data = await fetchReflection(week);
+    Object.entries(REFLECTION_FIELDS).forEach(([id, key]) => {
+      document.getElementById(id).value = (data && data[key]) || '';
+    });
+  } catch (err) {
+    status.textContent = "Couldn't load reflection";
+  }
+}
+
+async function fetchReflection(week) {
+  const res = await apiFetch(`${API_REFLECTION}?week_start=${week}`);
+  if (!res.ok) throw new Error('load failed');
+  return res.json();
+}
+
+async function saveReflection() {
+  const week = currentReflectionWeek();
+  if (!week) return;
+  const status = document.getElementById('refStatus');
+  status.textContent = 'Saving...';
+  const body = { week_start: week };
+  Object.entries(REFLECTION_FIELDS).forEach(([id, key]) => { body[key] = document.getElementById(id).value; });
+  try {
+    const res = await apiFetch(API_REFLECTION, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('save failed');
+    status.textContent = 'Saved';
+  } catch (err) {
+    status.textContent = "Couldn't save";
+  }
+}
+
+document.getElementById('refSaveBtn').addEventListener('click', saveReflection);
+document.getElementById('reportStart').addEventListener('change', syncReflectionPanel);
+document.getElementById('reportEnd').addEventListener('change', syncReflectionPanel);
+
 document.getElementById('exportBtn').addEventListener('click', toggleExportPanel);
 document.getElementById('cancelReportBtn').addEventListener('click', () => { document.getElementById('exportPanel').style.display = 'none'; });
 document.getElementById('lastWeekBtn').addEventListener('click', setLastWeekRange);
@@ -1254,6 +1361,47 @@ async function loadReportEntries() {
     .filter(e => !isJunk(e))
     .sort((a, b) => (a.session_date + (a.start_time || '')).localeCompare(b.session_date + (b.start_time || '')));
   return { start, end, entries };
+}
+
+// Shared by both exports: the stored reflection for a report range as
+// [label, text] pairs, or [] if the range isn't exactly one Sun-Sat week, has
+// no reflection, or the fetch fails (non-fatal — the report still prints).
+async function reflectionItems(start, end) {
+  const week = rangeWeekStart(start, end);
+  if (!week) return [];
+  let data;
+  try {
+    data = await fetchReflection(week);
+  } catch (err) {
+    return [];
+  }
+  return [
+    ['Key achievement', data.key_achievement],
+    ['Primary technical challenge', data.primary_challenge],
+    ['Specific measures for review', data.measures_for_review],
+    ['Questions for instructor', data.questions_for_instructor]
+  ].filter(([, val]) => nonEmpty(val));
+}
+
+// Weekly-reflection block for the narrative PDF.
+function reflectionSection(items) {
+  if (!items.length) return '';
+  return `<div class="section-heading">Weekly reflection</div>` + items.map(([label, val]) => `
+    <div class="reflect-item">
+      <div class="reflect-label">${escapeHtml(label)}</div>
+      <div class="reflect-text">${escapeHtml(val)}</div>
+    </div>`).join('');
+}
+
+// Same reflection, in the class chart's plainer print style: a bordered block
+// above the table rather than anything woven into the per-session rows, since
+// it's week-level synthesis, not day-level data.
+function reflectionChartBlock(items) {
+  if (!items.length) return '';
+  return `<div class="reflect-block">
+    <div class="reflect-head">Weekly reflection</div>
+    ${items.map(([label, val]) => `<div class="reflect-row"><b>${escapeHtml(label)}:</b> ${escapeHtml(val)}</div>`).join('')}
+  </div>`;
 }
 
 async function buildRangeReport() {
@@ -1312,6 +1460,11 @@ async function buildRangeReport() {
 
   const rangeLabel = `${formatDateLabel(start)} &ndash; ${formatDateLabel(end)}`;
 
+  // When the range is exactly one Sun-Sat week and that week has a saved
+  // reflection, it leads the report — it's the part written for the
+  // instructor, so it shouldn't sit below the session detail.
+  const reflectionHtml = reflectionSection(await reflectionItems(start, end));
+
   let html = `<html><head><title>Practice log</title><style>
     body{font-family:Georgia,serif;color:#2C1810;padding:40px;max-width:700px;margin:auto;}
     h1{font-size:22px;border-bottom:2px solid #2C1810;padding-bottom:10px;margin-bottom:4px;}
@@ -1335,6 +1488,9 @@ async function buildRangeReport() {
     .entry-notes{font-size:12px;color:#2C1810;margin-top:4px;}
     .entry-notes div{margin-top:2px;}
     .entry-notes b{color:#7A5535;font-weight:normal;font-style:italic;}
+    .reflect-item{margin-bottom:10px;}
+    .reflect-label{font-size:10px;color:#7A5535;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;}
+    .reflect-text{font-size:13px;white-space:pre-wrap;}
   </style></head><body>
     <h1>Practice log</h1>
     <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel}</div>
@@ -1343,6 +1499,7 @@ async function buildRangeReport() {
       <div class="stat-card"><div class="stat-label">Days practiced</div><div class="stat-value">${daysPracticed} / ${totalDaysInRange}</div></div>
     </div>
     ${categoryRows ? `<div class="cat-heading">Categories touched</div>${categoryRows}` : ''}
+    ${reflectionHtml}
     <div class="section-heading">Session detail</div>
     ${detailHtml || '<div style="font-size:13px;color:#7A5535;font-style:italic;">No entries in this range.</div>'}
   </body></html>`;
@@ -1478,6 +1635,7 @@ async function buildClassChart() {
   });
 
   const rangeLabel = `${formatDateLabel(start)} &ndash; ${formatDateLabel(end)}`;
+  const reflectionHtml = reflectionChartBlock(await reflectionItems(start, end));
 
   const html = `<html><head><title>Practice chart</title><style>
     @page { size: landscape; margin: 0.5in; }
@@ -1496,9 +1654,14 @@ async function buildClassChart() {
     tbody tr:nth-child(even){background:#fafafa;}
     tr.day-head td{border-top:2px solid #333;background:#f0f0f0;font-size:13px;font-weight:bold;}
     tr.day-head .day-total{font-weight:normal;color:#555;font-size:11px;}
+    .reflect-block{border:0.5px solid #999;padding:8px 10px;margin-bottom:14px;font-size:10px;}
+    .reflect-head{font-size:9px;text-transform:uppercase;letter-spacing:0.03em;font-weight:bold;margin-bottom:4px;}
+    .reflect-row{margin-bottom:3px;white-space:pre-wrap;}
+    .reflect-row b{font-weight:normal;font-style:italic;color:#555;}
   </style></head><body>
     <h1>Practice chart</h1>
     <div class="meta">Jon Ward &middot; piano &middot; ${rangeLabel} &middot; ${fmtMins(totalMins)} over ${daysPracticed} day${daysPracticed === 1 ? '' : 's'}</div>
+    ${reflectionHtml}
     <table>
       <thead><tr>
         <th>Time</th><th>Duration</th><th>Warm-up: Scales</th><th>Warm-up: Arpeggios</th><th>Warm-up: Chords</th><th>Composer / Pieces</th><th>Tempo</th><th>Sight reading</th><th>Notes / Mood</th><th>Rec.</th>
