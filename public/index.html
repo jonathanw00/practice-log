@@ -407,7 +407,17 @@ const MOOD_LABELS = { focused: 'Focused', energized: 'Energized', calm: 'Calm', 
 function moodLabel(energyStr) {
   return (energyStr || '').split(',').map(s => s.trim()).filter(Boolean).map(v => MOOD_LABELS[v] || v).join(', ');
 }
-let isDark = false;
+// Theme: an explicit choice wins and sticks; with none stored we follow the OS.
+const THEME_KEY = 'practice_log_theme';
+let isDark = (localStorage.getItem(THEME_KEY) || '') === 'dark' ||
+  (localStorage.getItem(THEME_KEY) === null &&
+   window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+function applyTheme() {
+  document.body.classList.toggle('dark', isDark);
+  document.getElementById('modeBtn').textContent = isDark ? '☀ Light' : '🌙 Dark';
+}
+applyTheme();
 
 function setCurrentId(id) {
   currentId = id;
@@ -843,8 +853,8 @@ document.getElementById('energyPips').addEventListener('click', e => {
 
 document.getElementById('modeBtn').addEventListener('click', () => {
   isDark = !isDark;
-  document.body.classList.toggle('dark', isDark);
-  document.getElementById('modeBtn').textContent = isDark ? '☀ Light' : '🌙 Dark';
+  localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+  applyTheme();
 });
 
 function collectData() {

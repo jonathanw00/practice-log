@@ -638,9 +638,23 @@ document.getElementById('delBtn').addEventListener('click', () => {
   if (confirm(`Delete ${ids.length} selected ${ids.length===1?'entry':'entries'}? This can\u2019t be undone.`)) deleteEntries(ids);
 });
 
+// Theme: same key as index.html, so the choice carries between the two pages.
+// An explicit choice wins and sticks; with none stored we follow the OS.
+const THEME_KEY = 'practice_log_theme';
+let isDark = (localStorage.getItem(THEME_KEY) || '') === 'dark' ||
+  (localStorage.getItem(THEME_KEY) === null &&
+   window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+function applyTheme() {
+  document.body.classList.toggle('dark', isDark);
+  document.getElementById('modeBtn').textContent = isDark ? '☀ Light' : '🌙 Dark';
+}
+applyTheme();
+
 document.getElementById('modeBtn').addEventListener('click', () => {
-  document.body.classList.toggle('dark');
-  document.getElementById('modeBtn').textContent = document.body.classList.contains('dark') ? '☀ Light' : '🌙 Dark';
+  isDark = !isDark;
+  localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+  applyTheme();
 });
 
 let toastT;
